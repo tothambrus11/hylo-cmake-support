@@ -1,0 +1,4 @@
+public fun base() -> Int32 { 23 }
+public fun feat(c: Int) -> Int {
+    .zero()
+}

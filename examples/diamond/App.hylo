@@ -1,0 +1,3 @@
+import Left
+public fun main() -> Int32 { left() }
+ 

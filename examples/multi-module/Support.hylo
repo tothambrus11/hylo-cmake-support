@@ -1,0 +1,21 @@
+public fun hello() -> Int32 {
+  42
+}
+
+
+fun f() {
+  precondition(true)
+  _ = hello()
+  _ = answer(x:4)
+
+  fun answer(_ x: Int){
+
+  }
+}
+
+type X = {Int, Int}
+type Y<T> = {T, T}
+
+fun f(y: Y) {
+
+}

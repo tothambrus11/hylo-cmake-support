@@ -1,0 +1,5 @@
+import Support
+
+public fun main() -> Int32 {
+   hello()
+}

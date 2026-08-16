@@ -1,0 +1,10 @@
+public fun bonus() -> Int32 {
+  1
+}
+
+
+struct A {
+  memberwise init
+}
+
+let sw = bonus()

@@ -1,0 +1,10 @@
+import Base
+public fun left() -> Int32 { base() }
+
+fun ff(){
+
+    _ = left()
+  _ = feat(feat(4))
+
+  _ = feat(3)
+}

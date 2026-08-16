@@ -1,0 +1,2 @@
+import Base
+public fun right() -> Int32 { ba se() }
