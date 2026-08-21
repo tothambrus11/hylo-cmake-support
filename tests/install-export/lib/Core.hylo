@@ -1,0 +1,1 @@
+public fun core_value() -> Int32 { 31 }

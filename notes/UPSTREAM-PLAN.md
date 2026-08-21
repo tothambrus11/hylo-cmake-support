@@ -21,7 +21,7 @@ the C toolchain. Properties, verified by `tests/*.cmake` under ctest:
 | `hylo-project.json` for the language server, generate-time accurate | ✅ |
 | hermetic per-build-tree stdlib module cache, warmed at configure time | ✅ |
 | OBJECT libraries | ❌ (CMake object map ignores external objects) |
-| install/export of Hylo libraries | ❌ not wired yet |
+| install/export of Hylo libraries (`hylo_install_module` + `install(EXPORT)`, consumed via `find_package`) | ✅ |
 | VS / Xcode generators | untested (nothing generator-specific is used except restat) |
 
 ### What changed versus the language-module version
@@ -90,11 +90,10 @@ buys Hylo.
   `find_package(Hylo)` works with `CMAKE_PREFIX_PATH=<toolchain>` and no module
   path fiddling. Straightforward: the find module already computes everything from
   `hc` itself.
-- Add **install/export** support: install the `.hylomodule` + `.iface` next to the
-  library, and export `INTERFACE_HYLO_IMPORTS` / `..._MODULE_SEARCH_PATHS` /
-  `..._MODULE_DEPENDS` pointing at installed paths. CMake 3.30 exports custom
-  transitive properties, so this is mostly plumbing (`install(FILES
-  $<TARGET_PROPERTY:t,HYLO_MODULE_ARCHIVE>)` + `EXPORT_PROPERTIES`).
+- ~~Add install/export support~~ — done (`hylo_install_module`; CMake 3.30 exports
+  custom transitive properties, and `$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/lib/hylo>`
+  resolves to `${_IMPORT_PREFIX}` in the export file). Missing: a compiler-version
+  check when importing an installed archive (hc only fails with "cannot parse").
 - Propose the integration to `hylo-lang` as the official CMake support (it is
   toolchain-agnostic beyond the `hc` CLI, which is now stable enough to pin).
 
@@ -167,8 +166,8 @@ language-module world as well.
 
 1. Push to CI (`.github/workflows/ci.yml`: Linux x64/arm64, macOS arm64; Ninja,
    Multi-Config, Makefiles) and keep it green.
-2. Tier 0: package-config layout + install/export of Hylo libraries, with an
-   example that installs `Support` and consumes it from a separate project.
+2. Tier 0: package-config layout (`HyloConfig.cmake` shipped inside the toolchain
+   so `find_package(Hylo)` needs no module path).
 3. Tier 1.1 and 1.2 as CMake MRs — both are small and each has a crisp test.
 4. On the hc side: the precise interface hash (#321) is the single biggest win the
    build graph is waiting for.

@@ -96,6 +96,21 @@ COMMANDS
   Sets the target properties ``HYLO_MODULE_NAME``, ``HYLO_MODULE_OBJECT``, and
   for libraries ``HYLO_MODULE_ARCHIVE`` and ``HYLO_MODULE_INTERFACE_HASH``.
 
+.. command:: hylo_install_module
+
+  ::
+
+    hylo_install_module(<target> [DESTINATION <dir>] [COMPONENT <component>])
+
+  Installs a Hylo library's ``.hylomodule`` archive and ``.iface`` interface
+  hash (default destination ``${CMAKE_INSTALL_LIBDIR}/hylo`` or ``lib/hylo``)
+  and records their installed locations in the target's interface, so that
+  after the usual ``install(TARGETS <target> EXPORT ...)`` +
+  ``install(EXPORT ...)`` a consumer's ``target_link_libraries`` against the
+  imported target imports the module from the installed files.  The consumer
+  needs its own ``find_package(Hylo)`` (for ``hylo_add_executable`` and
+  ``Hylo::Runtime``) with a compatible compiler.
+
 .. command:: hylo_target_compile_options
 
   ::
@@ -256,10 +271,12 @@ function(hylo_target_module target)
   # SOURCES are relative to the target's source directory (CMP0076).
   set(_sources
     "$<PATH:ABSOLUTE_PATH,NORMALIZE,$<FILTER:$<TARGET_PROPERTY:${target},SOURCES>,INCLUDE,\\.hylo$>,${CMAKE_CURRENT_SOURCE_DIR}>")
-  set(_imports "$<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${target},HYLO_IMPORTS>>")
-  set(_search_paths "$<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${target},HYLO_MODULE_SEARCH_PATHS>>")
-  set(_module_depends "$<REMOVE_DUPLICATES:$<TARGET_PROPERTY:${target},HYLO_MODULE_DEPENDS>>")
-  set(_options "$<TARGET_PROPERTY:${target},HYLO_COMPILE_OPTIONS>")
+  # $<BUILD_INTERFACE:...>/$<INSTALL_INTERFACE:...> entries evaluate to empty
+  # strings in the other context; drop those before prefixing with flags.
+  set(_imports "$<REMOVE_DUPLICATES:$<FILTER:$<TARGET_PROPERTY:${target},HYLO_IMPORTS>,EXCLUDE,^$>>")
+  set(_search_paths "$<REMOVE_DUPLICATES:$<FILTER:$<TARGET_PROPERTY:${target},HYLO_MODULE_SEARCH_PATHS>,EXCLUDE,^$>>")
+  set(_module_depends "$<REMOVE_DUPLICATES:$<FILTER:$<TARGET_PROPERTY:${target},HYLO_MODULE_DEPENDS>,EXCLUDE,^$>>")
+  set(_options "$<FILTER:$<TARGET_PROPERTY:${target},HYLO_COMPILE_OPTIONS>,EXCLUDE,^$>")
 
   # ---- Command -------------------------------------------------------------
   set(_cmd "${Hylo_COMPILER}" --module-name "${_module}")
@@ -309,12 +326,15 @@ function(hylo_target_module target)
     TRANSITIVE_COMPILE_PROPERTIES "HYLO_IMPORTS;HYLO_COMPILE_OPTIONS"
     TRANSITIVE_LINK_PROPERTIES "HYLO_MODULE_SEARCH_PATHS;HYLO_MODULE_DEPENDS")
   if(_is_library)
+    # Build-tree paths only; hylo_install_module() adds the INSTALL_INTERFACE
+    # counterparts so an exported target points consumers at the installed
+    # archive and hash.
     set_target_properties(${target} PROPERTIES
       HYLO_MODULE_ARCHIVE "${_archive}"
       HYLO_MODULE_INTERFACE_HASH "${_iface}"
       INTERFACE_HYLO_IMPORTS "${_module}"
-      INTERFACE_HYLO_MODULE_SEARCH_PATHS "${_dir}"
-      INTERFACE_HYLO_MODULE_DEPENDS "${_iface}")
+      INTERFACE_HYLO_MODULE_SEARCH_PATHS "$<BUILD_INTERFACE:${_dir}>"
+      INTERFACE_HYLO_MODULE_DEPENDS "$<BUILD_INTERFACE:${_iface}>")
   endif()
 
   get_target_property(_linker_language ${target} LINKER_LANGUAGE)
@@ -323,7 +343,16 @@ function(hylo_target_module target)
   endif()
 
   if(NOT arg_NO_RUNTIME)
-    target_link_libraries(${target} PRIVATE Hylo::Runtime)
+    if(_is_library)
+      # Libraries carry the runtime to their consumers in the build tree only.
+      # An installed/exported library must not reference our hylo-runtime target
+      # (it is not in the user's export set); consumers get the runtime from
+      # their own find_package(Hylo) + hylo_add_executable. Shared libraries
+      # link it in directly, so their install interface needs nothing.
+      target_link_libraries(${target} PRIVATE "$<BUILD_INTERFACE:Hylo::Runtime>")
+    else()
+      target_link_libraries(${target} PRIVATE Hylo::Runtime)
+    endif()
   endif()
 
   # ---- Project manifest (for the language server) --------------------------
@@ -408,6 +437,53 @@ function(hylo_target_compile_options target)
       endif()
     endif()
   endforeach()
+endfunction()
+
+# ---------------------------------------------------------------------------
+# Installation
+# ---------------------------------------------------------------------------
+
+function(hylo_install_module target)
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "DESTINATION;COMPONENT" "")
+  if(arg_UNPARSED_ARGUMENTS)
+    message(FATAL_ERROR "hylo_install_module(${target}): unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
+  endif()
+  if(NOT TARGET ${target})
+    message(FATAL_ERROR "hylo_install_module: '${target}' is not a target")
+  endif()
+  get_target_property(_archive ${target} HYLO_MODULE_ARCHIVE)
+  get_target_property(_iface ${target} HYLO_MODULE_INTERFACE_HASH)
+  get_target_property(_module ${target} HYLO_MODULE_NAME)
+  if(NOT _archive)
+    message(FATAL_ERROR "hylo_install_module(${target}): not a Hylo library target")
+  endif()
+
+  set(_dest "${arg_DESTINATION}")
+  if(NOT _dest)
+    if(DEFINED CMAKE_INSTALL_LIBDIR)
+      set(_dest "${CMAKE_INSTALL_LIBDIR}/hylo")
+    else()
+      set(_dest "lib/hylo")
+    endif()
+  endif()
+  set(_component)
+  if(arg_COMPONENT)
+    set(_component COMPONENT "${arg_COMPONENT}")
+  endif()
+
+  install(FILES "${_archive}" "${_iface}" DESTINATION "${_dest}" ${_component})
+
+  # Absolute destinations are used as-is; relative ones are under the prefix
+  # ($<INSTALL_PREFIX> becomes ${_IMPORT_PREFIX} in the export file).
+  if(IS_ABSOLUTE "${_dest}")
+    set(_installed_dir "${_dest}")
+  else()
+    set(_installed_dir "$<INSTALL_PREFIX>/${_dest}")
+  endif()
+  set_property(TARGET ${target} APPEND PROPERTY
+    INTERFACE_HYLO_MODULE_SEARCH_PATHS "$<INSTALL_INTERFACE:${_installed_dir}>")
+  set_property(TARGET ${target} APPEND PROPERTY
+    INTERFACE_HYLO_MODULE_DEPENDS "$<INSTALL_INTERFACE:${_installed_dir}/${_module}.iface>")
 endfunction()
 
 # ---------------------------------------------------------------------------

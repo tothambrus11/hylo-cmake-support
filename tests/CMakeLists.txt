@@ -10,6 +10,13 @@
 find_program(HYLO_TEST_NINJA ninja)
 find_program(HYLO_TEST_MAKE NAMES gmake make)
 
+# The fixtures assume a single-config layout; under Ninja Multi-Config run them
+# with plain Ninja (the multi-config generator has its own dedicated test).
+set(HYLO_TEST_GENERATOR "${CMAKE_GENERATOR}")
+if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+  set(HYLO_TEST_GENERATOR "Ninja")
+endif()
+
 function(add_behaviour_test name)
   cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "ARGS")
   add_test(NAME behaviour.${name}
@@ -17,7 +24,7 @@ function(add_behaviour_test name)
       "-DSOURCE_DIR=${CMAKE_SOURCE_DIR}"
       "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/${name}"
       "-DHylo_COMPILER=${Hylo_COMPILER}"
-      "-DGENERATOR=${CMAKE_GENERATOR}"
+      "-DGENERATOR=${HYLO_TEST_GENERATOR}"
       "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
       "-DC_COMPILER=${CMAKE_C_COMPILER}"
       "-DNINJA=${HYLO_TEST_NINJA}"
@@ -37,6 +44,7 @@ endif()
 add_behaviour_test(import-visibility)
 add_behaviour_test(per-config-flags)
 add_behaviour_test(project-manifest)
+add_behaviour_test(install-export)
 if(HYLO_TEST_NINJA)
   add_behaviour_test(generator-ninja-multi-config)
 endif()

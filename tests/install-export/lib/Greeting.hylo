@@ -1,0 +1,2 @@
+import GreetingCore
+public fun greeting() -> Int32 { core_value() }

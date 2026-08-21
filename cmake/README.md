@@ -6,7 +6,7 @@ features (no `CMakeDetermine<LANG>Compiler` internals):
 | file | role |
 |---|---|
 | `FindHylo.cmake` | finds `hc`, queries it (`--version`, `--print-stdlib-root`), checks it works, defines `Hylo::hc` / `Hylo::Runtime`, the `Hylo_*` configuration variables, and includes the next file |
-| `HyloTargets.cmake` | `hylo_add_library`, `hylo_add_executable`, `hylo_target_module`, `hylo_target_compile_options`, and the `hylo-project.json` writer |
+| `HyloTargets.cmake` | `hylo_add_library`, `hylo_add_executable`, `hylo_target_module`, `hylo_target_compile_options`, `hylo_install_module`, and the `hylo-project.json` writer |
 | `RunExpectExit.cmake` | ctest helper used by this repo's examples: assert an exact exit status |
 
 Tested against **hc 0.0.6** (the first release with `--module-search-path`,
@@ -43,7 +43,21 @@ hylo_add_library(<target> [STATIC|SHARED|MODULE] [EXCLUDE_FROM_ALL]
 hylo_add_executable(<target> [EXCLUDE_FROM_ALL] [MODULE_NAME <name>] [NO_RUNTIME] [SOURCES] <file>...)
 hylo_target_module(<existing-target> [MODULE_NAME <name>] [NO_RUNTIME])   # the primitive the two above use
 hylo_target_compile_options(<target> <PRIVATE|PUBLIC|INTERFACE> <hc-option>...)
+hylo_install_module(<library-target> [DESTINATION <dir>] [COMPONENT <c>])   # + install(TARGETS ... EXPORT)
 ```
+
+Installing a Hylo library for other projects is the standard three lines plus one:
+
+```cmake
+install(TARGETS Support EXPORT SupportTargets ARCHIVE DESTINATION lib)
+hylo_install_module(Support)                      # installs Support.hylomodule + Support.iface under lib/hylo
+install(EXPORT SupportTargets NAMESPACE Support:: DESTINATION lib/cmake/Support)
+```
+
+A consumer then does `find_package(Hylo)` + `find_package(Support)` and
+`target_link_libraries(app PRIVATE Support::Support)`; the exported target carries
+the module name, the installed archive directory and the interface-hash file
+(`tests/install-export/`).
 
 `hylo_target_module` turns a target you created with `add_library`/`add_executable`
 into a Hylo module; every `.hylo` file among its `SOURCES` — including ones added
@@ -138,9 +152,10 @@ and may inline their layouts.
   (`hylo_target_module` sets `C` only when nothing is set).
 - `hylo-project.json` paths containing `"` or `\` are not escaped (it is written
   with `file(GENERATE)` from generator expressions, which cannot escape).
-- Installing / exporting Hylo library targets (`install(EXPORT)`) is not wired up
-  yet — the archive and `.iface` would need installing and the `INTERFACE_HYLO_*`
-  properties pointing at installed paths. Tracked in `../notes/UPSTREAM-PLAN.md`.
+- Installing/exporting works (`hylo_install_module` + the usual
+  `install(TARGETS ... EXPORT)`; `behaviour.install-export`), but the consumer must
+  use a compatible `hc` — archives are tied to the compiler version and there is
+  no version check on import yet beyond hc's own "cannot parse archive" error.
 - Visual Studio / Xcode generators: untested. Nothing here is Ninja-specific
   except the `restat` pruning; Unix Makefiles are tested.
 
