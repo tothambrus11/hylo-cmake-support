@@ -38,8 +38,19 @@ jobs:
           - name: macOS arm64 (Ninja, Debug)
             os: macos-26
             preset: default
+          # Experimental: nothing in the modules is POSIX-specific, but Windows
+          # (MSVC linker + COFF objects from hc) has not been exercised yet.
+          - name: Windows x64 (Ninja, Debug) [experimental]
+            os: windows-latest
+            preset: default
+            experimental: true
+    continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       # Pinned CMake + Ninja; FindHylo needs CMake >= 3.30.
       - uses: lukka/get-cmake@latest
