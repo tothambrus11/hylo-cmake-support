@@ -12,7 +12,7 @@ features (no `CMakeDetermine<LANG>Compiler` internals):
 
 Tested against **hc 0.0.6** (the first release with `--module-search-path`,
 `--import`, `--emit-module-to`, `--emit-module-interface-hash-to`, `--version`)
-and CMake 4.3; requires **CMake ≥ 3.30**.
+and CMake 4.3; requires **CMake ≥ 3.30**. CI: Linux x64/arm64, macOS arm64, Windows x64.
 
 ## Usage
 
@@ -167,7 +167,9 @@ and may inline their layouts.
   use a compatible `hc` — archives are tied to the compiler version and there is
   no version check on import yet beyond hc's own "cannot parse archive" error.
 - Visual Studio / Xcode generators: untested. Nothing here is Ninja-specific
-  except the `restat` pruning; Unix Makefiles are tested.
+  except the `restat` pruning; Unix Makefiles are tested, and Windows with
+  MSVC + Ninja is covered by CI (hc's COFF objects link with `link.exe`; the
+  runtime forces the shim object in so a C runtime is always selected).
 
 ## Testing
 

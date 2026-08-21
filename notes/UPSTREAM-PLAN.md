@@ -23,6 +23,7 @@ the C toolchain. Properties, verified by `tests/*.cmake` under ctest:
 | OBJECT libraries | ❌ (CMake object map ignores external objects) |
 | install/export of Hylo libraries (`hylo_install_module` + `install(EXPORT)`, consumed via `find_package`) | ✅ |
 | package config for shipping inside a toolchain (`find_package(Hylo)` from `CMAKE_PREFIX_PATH`) | ✅ |
+| Windows (MSVC + Ninja), macOS arm64, Linux x64/arm64 | ✅ in CI |
 | VS / Xcode generators | untested (nothing generator-specific is used except restat) |
 
 ### What changed versus the language-module version

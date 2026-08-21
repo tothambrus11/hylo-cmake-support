@@ -352,6 +352,8 @@ def write_svg(path, track, trail, sensor_trail, title):
 
 def write_png(path, track, trail, sensor_trail, title):
     """Optional raster picture (needs matplotlib)."""
+    import warnings
+    warnings.filterwarnings("ignore")  # matplotlib's own import-time chatter
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
