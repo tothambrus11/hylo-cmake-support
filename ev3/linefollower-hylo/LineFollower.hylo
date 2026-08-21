@@ -1,0 +1,45 @@
+// Line follower in Hylo.
+//
+// Same controller as linefollower-c/main.c: a proportional controller keeps
+// the colour sensor on the LEFT edge of a dark line (the line is on the
+// robot's right). Uses only Int32 arithmetic, Bool, `if`, `while` and calls
+// into the C library -- the subset of Hylo v0.0.6 that is known to work.
+// Int literals mixed with Int32 need `as Int32`; returning a `let` parameter
+// needs `.copy()`; there is no unary minus or `%` on Int32 yet; literals passed
+// to Int32 parameters need `as Int32`.
+
+fun clamp(_ x: Int32, _ lo: Int32, _ hi: Int32) -> Int32 {
+  if x < lo { return lo.copy() }
+  if x > hi { return hi.copy() }
+  return x.copy()
+}
+
+public fun main() -> Int32 {
+  if ev3_init() != (0 as Int32) { return 1 }
+
+  let target: Int32 = 45   // sensor reading on the edge (black ~10, white ~80)
+  let kp10: Int32 = 12     // gain x10: percent of turn per unit of error
+  let base: Int32 = 30     // cruising speed, percent of maximum
+  let limit: Int32 = 60    // |turn| limit, percent
+  let period: Int32 = 10   // control period, ms
+  let zero: Int32 = 0
+
+  var since_log: Int32 = 0
+  while ev3_running() {
+    let light = ev3_color_reflect()
+    if light < zero { ev3_stop(); return 2 }        // sensor unplugged
+    let error = light - target                     // > 0: drifted onto white, steer right
+    let turn = clamp(x: error * kp10 / (10 as Int32), lo: zero - limit, hi: limit)
+    ev3_drive(left: base + turn, right: base - turn)
+    &since_log = since_log + (1 as Int32)
+    if since_log == (100 as Int32) {               // about once a second
+      ev3_log(tag: 1 as Int32, value: light)       // 1 = light, 2 = turn (tags, not strings)
+      ev3_log(tag: 2 as Int32, value: turn)
+      &since_log = 0
+    }
+    ev3_sleep(ms: period)
+  }
+
+  ev3_shutdown()
+  return 0
+}

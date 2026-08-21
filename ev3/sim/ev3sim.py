@@ -350,6 +350,29 @@ def write_svg(path, track, trail, sensor_trail, title):
     with open(path, "w") as f:
         f.write("\n".join(out))
 
+def write_png(path, track, trail, sensor_trail, title):
+    """Optional raster picture (needs matplotlib)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(9, 5))
+    xs = [p[0] for p in track.poly] + [track.poly[0][0]]
+    ys = [p[1] for p in track.poly] + [track.poly[0][1]]
+    ax.plot(xs, ys, color="black", linewidth=track.width * 2.2, solid_capstyle="round", zorder=1)
+    if trail:
+        ax.scatter([p[0] for p in trail], [p[1] for p in trail], c=range(len(trail)), cmap="cool", s=6, zorder=3)
+        ax.plot([p[0] for p in sensor_trail], [p[1] for p in sensor_trail], color="orangered", linewidth=0.6,
+                linestyle="--", zorder=2, label="sensor")
+        ax.plot(*trail[0], "o", color="green", markersize=8, label="start")
+        ax.plot(*trail[-1], "o", color="red", markersize=8, label="end")
+        ax.legend(loc="lower right", fontsize=8)
+    ax.set_aspect("equal")
+    ax.set_title(title, fontsize=8)
+    ax.set_xlabel("cm")
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+
+
 # --------------------------------------------------------------------- main
 
 def main():
@@ -365,7 +388,8 @@ def main():
     ap.add_argument("--rate", type=float, default=200.0, help="physics/sensor update rate, Hz")
     ap.add_argument("--noise", type=float, default=1.0, help="sensor noise sigma (reflect units)")
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--svg", default=None, help="write a picture of the run")
+    ap.add_argument("--svg", default=None, help="write a picture of the run (no dependencies)")
+    ap.add_argument("--png", default=None, help="write a picture of the run (needs matplotlib)")
     ap.add_argument("--sysfs-root", default=None, help="keep the fake sysfs here instead of a temp dir")
     ap.add_argument("--env", action="append", default=[], help="extra VAR=VALUE for the robot process")
     ap.add_argument("--quiet", action="store_true")
@@ -495,6 +519,9 @@ def main():
     if args.svg:
         write_svg(args.svg, track, trail, sensor_trail, summary.replace("ev3sim: ", ""))
         log("ev3sim: wrote %s" % args.svg)
+    if args.png:
+        write_png(args.png, track, trail, sensor_trail, summary.replace("ev3sim: ", ""))
+        log("ev3sim: wrote %s" % args.png)
     return 0 if ok else 1
 
 
