@@ -7,6 +7,7 @@ features (no `CMakeDetermine<LANG>Compiler` internals):
 |---|---|
 | `FindHylo.cmake` | finds `hc`, queries it (`--version`, `--print-stdlib-root`), checks it works, defines `Hylo::hc` / `Hylo::Runtime`, the `Hylo_*` configuration variables, and includes the next file |
 | `HyloTargets.cmake` | `hylo_add_library`, `hylo_add_executable`, `hylo_target_module`, `hylo_target_compile_options`, `hylo_install_module`, and the `hylo-project.json` writer |
+| `HyloConfig.cmake`, `HyloConfigVersion.cmake` | package-config shim for shipping the four files inside a toolchain (`<root>/lib/cmake/Hylo/`), so `find_package(Hylo)` needs only `CMAKE_PREFIX_PATH` |
 | `RunExpectExit.cmake` | ctest helper used by this repo's examples: assert an exact exit status |
 
 Tested against **hc 0.0.6** (the first release with `--module-search-path`,
@@ -68,6 +69,15 @@ Configuration (cache variables): `Hylo_COMPILER`, `Hylo_FLAGS`,
 (hc's stdlib cache; defaults to inside the build tree), `Hylo_TARGET_TRIPLE`
 (`hc --target`, experimental), `Hylo_PROJECT_MANIFEST` (where the LSP manifest goes).
 Full reference: the header comments of `FindHylo.cmake` and `HyloTargets.cmake`.
+
+### Shipping the support inside a toolchain
+
+Copy `HyloConfig.cmake`, `HyloConfigVersion.cmake`, `FindHylo.cmake` and
+`HyloTargets.cmake` into `<toolchain>/lib/cmake/Hylo/` (the config locates
+`<toolchain>/bin/hc` or `<toolchain>/hc` relative to itself). Users then write
+`find_package(Hylo 0.0.6 REQUIRED)` with `CMAKE_PREFIX_PATH=<toolchain>` — no module
+path, no `hc` on `PATH` (`behaviour.package-config` simulates this layout). This is
+the intended distribution path for hylo-new's release tarballs.
 
 ## How it works, and why it is built this way
 

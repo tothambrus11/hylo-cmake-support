@@ -22,6 +22,7 @@ the C toolchain. Properties, verified by `tests/*.cmake` under ctest:
 | hermetic per-build-tree stdlib module cache, warmed at configure time | ✅ |
 | OBJECT libraries | ❌ (CMake object map ignores external objects) |
 | install/export of Hylo libraries (`hylo_install_module` + `install(EXPORT)`, consumed via `find_package`) | ✅ |
+| package config for shipping inside a toolchain (`find_package(Hylo)` from `CMAKE_PREFIX_PATH`) | ✅ |
 | VS / Xcode generators | untested (nothing generator-specific is used except restat) |
 
 ### What changed versus the language-module version
@@ -85,11 +86,11 @@ buys Hylo.
 
 ### Tier 0 — no upstream change; ship what we have (now)
 
-- Distribute `FindHylo.cmake`/`HyloTargets.cmake` with the Hylo toolchain, ideally
-  as a proper **package config** (`<prefix>/lib/cmake/Hylo/HyloConfig.cmake`) so
-  `find_package(Hylo)` works with `CMAKE_PREFIX_PATH=<toolchain>` and no module
-  path fiddling. Straightforward: the find module already computes everything from
-  `hc` itself.
+- ~~Package config~~ — done: `HyloConfig.cmake` + `HyloConfigVersion.cmake` locate
+  `hc` relative to themselves and defer to `FindHylo.cmake`; tested with a simulated
+  `<root>/bin/hc` + `<root>/lib/cmake/Hylo/` layout (`behaviour.package-config`).
+  Remaining: actually add the four files to hylo-new's release tarball
+  (`.github/workflows/release.yml`) — a hylo-new PR.
 - ~~Add install/export support~~ — done (`hylo_install_module`; CMake 3.30 exports
   custom transitive properties, and `$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/lib/hylo>`
   resolves to `${_IMPORT_PREFIX}` in the export file). Missing: a compiler-version
@@ -166,8 +167,8 @@ language-module world as well.
 
 1. Push to CI (`.github/workflows/ci.yml`: Linux x64/arm64, macOS arm64; Ninja,
    Multi-Config, Makefiles) and keep it green.
-2. Tier 0: package-config layout (`HyloConfig.cmake` shipped inside the toolchain
-   so `find_package(Hylo)` needs no module path).
+2. Tier 0: PR to hylo-new's release workflow to ship `lib/cmake/Hylo/*.cmake` in
+   the toolchain tarballs; propose this repo's `cmake/` as the official support.
 3. Tier 1.1 and 1.2 as CMake MRs — both are small and each has a crisp test.
 4. On the hc side: the precise interface hash (#321) is the single biggest win the
    build graph is waiting for.
