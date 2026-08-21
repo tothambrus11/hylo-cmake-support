@@ -1,0 +1,2 @@
+import Greeter
+public fun main() -> Int32 { greet() }

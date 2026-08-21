@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  HYLO_VERSION: v0.0.6
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64 (Ninja, Debug)
+            os: ubuntu-24.04
+            preset: default
+          - name: Linux x64 (Ninja, Release)
+            os: ubuntu-24.04
+            preset: release
+          - name: Linux x64 (Ninja Multi-Config)
+            os: ubuntu-24.04
+            preset: multi
+            build-preset: multi-debug
+            test-preset: multi-debug
+          - name: Linux x64 (Unix Makefiles)
+            os: ubuntu-24.04
+            preset: make
+          - name: Linux arm64 (Ninja, Debug)
+            os: ubuntu-24.04-arm
+            preset: default
+          # Hylo macOS releases are built on macOS 26 (see setup-hylo's README).
+          - name: macOS arm64 (Ninja, Debug)
+            os: macos-26
+            preset: default
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned CMake + Ninja; FindHylo needs CMake >= 3.30.
+      - uses: lukka/get-cmake@latest
+
+      - name: Install Hylo ${{ env.HYLO_VERSION }}
+        id: hylo
+        uses: hylo-lang/setup-hylo@v1.0.0
+        with:
+          version: ${{ env.HYLO_VERSION }}
+
+      - name: Toolchain info
+        run: |
+          hc --version
+          hc --print-stdlib-root
+          cmake --version | head -1
+          ninja --version
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.build-preset || matrix.preset }}
+
+      - name: Test (exit-status tests)
+        run: ctest --preset ${{ matrix.test-preset || matrix.preset }} -LE behaviour
+
+      - name: Test (build-system behaviour)
+        run: ctest --preset ${{ matrix.test-preset || matrix.preset }} -L behaviour -j 2
+
+      - name: Show project manifest
+        if: always()
+        run: cat build*/hylo-project.json || true

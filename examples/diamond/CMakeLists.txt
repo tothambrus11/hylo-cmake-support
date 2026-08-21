@@ -1,15 +1,20 @@
 # A diamond module graph: Base <- Left, Base <- Right, Left <- App.
 #
-# App only IMPORTS Left directly; hc resolves Base transitively by reading
-# Left.hylomodule's dependency header. The build declares only DIRECT edges
-# and CMake's transitive target_link_libraries carries the objects to the link.
+# App only links Left. Left's dependency on Base is PRIVATE, so App does not get
+# `--import=Base` (it could not name Base's declarations without importing it),
+# but Base's archive directory and interface hash still reach App through the
+# link closure: hc resolves Base transitively by reading Left.hylomodule's
+# dependency header, and App recompiles if Base's interface changes.
 
-hylo_add_library(Base  MODULE_NAME Base  SOURCES Base.hylo)
-hylo_add_library(Left  MODULE_NAME Left  SOURCES Left.hylo  IMPORTS Base)
-hylo_add_library(Right MODULE_NAME Right SOURCES Right.hylo IMPORTS Base)
+hylo_add_library(Base  SOURCES Base.hylo)
+hylo_add_library(Left  SOURCES Left.hylo)
+hylo_add_library(Right SOURCES Right.hylo)
+target_link_libraries(Left  PRIVATE Base)
+target_link_libraries(Right PUBLIC  Base)
+
 hylo_add_executable(diamond
-        MODULE_NAME MainDiamond
-        SOURCES App.hylo
-        IMPORTS Left)
+  MODULE_NAME MainDiamond
+  SOURCES App.hylo)
+target_link_libraries(diamond PRIVATE Left)
 
 add_exit_status_test(diamond_exits_23 diamond 23)

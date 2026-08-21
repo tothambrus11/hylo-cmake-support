@@ -1,10 +1,4 @@
+/// A second file of the Support module; `hello` could call this.
 public fun bonus() -> Int32 {
   1
 }
-
-
-struct A {
-  memberwise init
-}
-
-let sw = bonus()

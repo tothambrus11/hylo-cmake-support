@@ -1,21 +1,15 @@
 {
-    "version": 3,
-    "cmakeMinimumRequired": {
-        "major": 3,
-        "minor": 21,
-        "patch": 0
-    },
+    "version": 6,
+    "cmakeMinimumRequired": { "major": 3, "minor": 30, "patch": 0 },
     "configurePresets": [
         {
             "name": "default",
-            "displayName": "Hylo (Ninja)",
-            "description": "Pins hc explicitly so the build does not depend on PATH. GUI-launched editors do not source ~/.bashrc, so a PATH set there is invisible to them.",
+            "displayName": "Hylo (Ninja, Debug)",
+            "description": "hc is found on PATH, via $HC, $HYLO_ROOT, or -DHylo_COMPILER=<path>. GUI-launched editors do not source ~/.bashrc, so prefer setting HYLO_ROOT in the IDE's environment or Hylo_COMPILER in a local preset.",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
-                "CMAKE_Hylo_COMPILER": "/home/ambrus/CMake/hylo-new/.build/release/hc"
+                "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
@@ -23,28 +17,35 @@
             "inherits": "default",
             "displayName": "Hylo (Ninja, Release)",
             "binaryDir": "${sourceDir}/build-release",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
-            }
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "multi",
+            "inherits": "default",
+            "displayName": "Hylo (Ninja Multi-Config)",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build-multi",
+            "cacheVariables": {}
+        },
+        {
+            "name": "make",
+            "inherits": "default",
+            "displayName": "Hylo (Unix Makefiles)",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build-make"
         }
     ],
     "buildPresets": [
-        {
-            "name": "default",
-            "configurePreset": "default"
-        },
-        {
-            "name": "release",
-            "configurePreset": "release"
-        }
+        { "name": "default", "configurePreset": "default" },
+        { "name": "release", "configurePreset": "release" },
+        { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug" },
+        { "name": "multi-release", "configurePreset": "multi", "configuration": "Release" },
+        { "name": "make", "configurePreset": "make" }
     ],
     "testPresets": [
-        {
-            "name": "default",
-            "configurePreset": "default",
-            "output": {
-                "outputOnFailure": true
-            }
-        }
+        { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
+        { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+        { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug", "output": { "outputOnFailure": true } },
+        { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } }
     ]
 }

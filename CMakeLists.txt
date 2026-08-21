@@ -1,22 +1,17 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.30)
 
-# Adding a language out-of-tree only requires putting the CMakeDetermine/
-# Information/Test modules on the module path before the language is enabled.
+project(HyloExperiment LANGUAGES C)
+
+# Hylo support is a find module plus one helper module, on the module path.
+# Nothing here touches CMake's internal language machinery.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(Hylo 0.0.6 REQUIRED)
 
-# C is enabled because Hylo's C interop is just... C. CMake compiles the .c
-# sources with its own C support and links them alongside the Hylo module.
-project(HyloExperiment LANGUAGES C Hylo)
-
-include(AddHylo)
-include(HyloProjectManifest)
-
-# 1. A plain multi-source Hylo module. Both files belong to one module; hc
-#    compiles them together and cross-file references resolve. Exits 42.
+# A plain multi-source Hylo module: both files belong to one module, hc compiles
+# them together, and cross-file references resolve. Exits 42.
 hylo_add_executable(hello
   MODULE_NAME Hello
-  src/main.hylo
-  src/support.hylo)
+  SOURCES src/main.hylo src/support.hylo)
 
 # These programs report their result through the exact exit status, matching the
 # "exit-status:N" option in the upstream Hylo test packages. Defined before the
@@ -33,6 +28,7 @@ add_exit_status_test(hello_exits_42 hello 42)
 
 add_subdirectory(examples)
 
-# Emit the LSP-facing project manifest describing every Hylo module declared
-# above (including the examples).
-hylo_write_project_manifest()
+# Build-system behaviour tests (incremental rebuilds, generators, ...). They
+# configure and build the examples in scratch directories, so they are slower
+# than the exit-status tests above; run them with `ctest -L behaviour`.
+add_subdirectory(tests)

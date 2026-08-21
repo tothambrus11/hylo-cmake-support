@@ -1,5 +1,12 @@
 # How Hylo's compiler should change for build-system support
 
+> **Status (2026-08-22):** this document describes the *language-module* integration
+> this repository started with (`CMakeDetermineHyloCompiler.cmake` & co.). That
+> integration was replaced by a `find_package(Hylo)` + custom-command design when
+> moving to hc 0.0.6; see `../cmake/README.md` for the current design and
+> `UPSTREAM-PLAN.md` for what changed and why. The analysis below is kept as history;
+> its findings about hc and about upstream CMake still hold.
+
 Findings and prototypes from driving `hc` under CMake. Everything here is **implemented and
 measured** in this session's `hylo-new` tree unless marked "proposal". The Hylo test suite (416
 tests) passes with the changes.
