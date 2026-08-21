@@ -267,6 +267,18 @@ if(Hylo_FOUND)
     if(UNIX AND NOT APPLE)
       target_link_libraries(hylo-runtime INTERFACE m)
     endif()
+    # MSVC's linker learns which C runtime to link from /DEFAULTLIB directives
+    # embedded in C objects; hc's objects carry none.  A Hylo program that never
+    # allocates would not pull shims.obj out of the archive, link no CRT at all,
+    # and fail with "unresolved external symbol mainCRTStartup".  Force the shim
+    # in so its CRT directive always applies (matches CMAKE_MSVC_RUNTIME_LIBRARY).
+    if(MSVC)
+      if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_link_options(hylo-runtime INTERFACE "LINKER:/INCLUDE:_c_malloc_indirect")
+      else()
+        target_link_options(hylo-runtime INTERFACE "LINKER:/INCLUDE:c_malloc_indirect")
+      endif()
+    endif()
     add_library(Hylo::Runtime ALIAS hylo-runtime)
   endif()
 
