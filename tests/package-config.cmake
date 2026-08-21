@@ -5,11 +5,14 @@
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 file(REMOVE_RECURSE "${WORK_DIR}")
 set(_root "${WORK_DIR}/toolchain")
-file(MAKE_DIRECTORY "${_root}/bin" "${_root}/lib/cmake/Hylo")
-# hc resolves its bundled standard library through the real executable path, so
-# a symlink is enough to stand in for an installed toolchain.
+file(MAKE_DIRECTORY "${_root}/lib/cmake/Hylo")
+# Stand in for an installed toolchain by symlinking the directory that holds hc
+# as <root>/bin: the bundled standard library (Hylo_StandardLibrary.resources)
+# must stay next to the executable -- on macOS hc looks it up via its own,
+# unresolved, executable path, so linking hc alone would not do.
 get_filename_component(_hc_name "${Hylo_COMPILER}" NAME)
-file(CREATE_LINK "${Hylo_COMPILER}" "${_root}/bin/${_hc_name}" SYMBOLIC)
+get_filename_component(_hc_dir "${Hylo_COMPILER}" DIRECTORY)
+file(CREATE_LINK "${_hc_dir}" "${_root}/bin" SYMBOLIC)
 foreach(_f HyloConfig.cmake HyloConfigVersion.cmake FindHylo.cmake HyloTargets.cmake)
   file(COPY "${SOURCE_DIR}/cmake/${_f}" DESTINATION "${_root}/lib/cmake/Hylo")
 endforeach()

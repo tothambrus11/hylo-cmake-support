@@ -68,14 +68,15 @@ static int write_attr(const char* path, const char* value) {
 
 static int read_attr_int(const char* path, int fallback) {
   char buf[64];
-  /* A simulator writing the file in place may be caught mid-write once in a
-   * blue moon; an empty read is retried once before giving up. */
-  for (int attempt = 0; attempt < 2; attempt++) {
+  /* sysfs never hands out an empty attribute, but be tolerant anyway (a
+   * simulator or a hot-plugged device could): retry briefly before giving up. */
+  for (int attempt = 0; attempt < 3; attempt++) {
     if (read_attr(path, buf, sizeof buf) > 0) {
       char* end;
       long v = strtol(buf, &end, 10);
       if (end != buf) return (int)v;
     }
+    usleep(200);
   }
   return fallback;
 }

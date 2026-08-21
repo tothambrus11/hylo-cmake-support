@@ -155,6 +155,7 @@ class FakeSysfs:
                 "ramp_up_sp": "0", "ramp_down_sp": "0",
             })
         self._cmd_mtime = [None, None]
+        self._speed_sp = [0, 0]
 
     @staticmethod
     def _init_files(d, attrs):
@@ -172,10 +173,13 @@ class FakeSysfs:
 
     @staticmethod
     def _write(path, value):
-        # in place (no rename): the robot may hold the path, and ev3c re-reads
-        # files each time; an empty read is retried on its side.
-        with open(path, "w") as f:
+        # Atomic replace: the robot re-opens attributes on every access (like it
+        # must with real sysfs), so it always sees a complete old or new value,
+        # never an empty file mid-write.
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
             f.write(str(value) + "\n")
+        os.replace(tmp, path)
 
     def set_sensor(self, value):
         self._write(os.path.join(self.sensor, "value0"), int(value))
@@ -195,12 +199,18 @@ class FakeSysfs:
             mt = None
         event = None
         if mt != self._cmd_mtime[i]:
-            self._cmd_mtime[i] = mt
-            event = self._read(cmd_path) or None
+            # The robot writes with open(O_TRUNC) + write(); if we look exactly
+            # in between we see an empty file: leave the mtime unconsumed and
+            # pick the command up next tick instead of losing it.
+            text = self._read(cmd_path)
+            if text:
+                self._cmd_mtime[i] = mt
+                event = text
         try:
-            speed_sp = int(self._read(os.path.join(m, "speed_sp")) or 0)
+            speed_sp = int(self._read(os.path.join(m, "speed_sp")))
+            self._speed_sp[i] = speed_sp
         except ValueError:
-            speed_sp = 0
+            speed_sp = self._speed_sp[i]  # caught mid-write: keep the last value
         return event, speed_sp, self._read(os.path.join(m, "stop_action")) or "coast"
 
     def set_motor_state(self, i, position, speed, running):
