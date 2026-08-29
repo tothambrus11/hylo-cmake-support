@@ -15,8 +15,9 @@ layout, hylo-new#523; the CLI surface used here — `--module-search-path`,
 `--import`, `--emit-module-to`, `--emit-module-interface-hash-to`,
 `--version` — dates from 0.0.6, but the older layouts are not supported) and
 **CMake ≥ 3.30**, tested through CMake 4.3. CI: Linux x64/arm64, macOS
-arm64, Windows x64, a CMake-3.30.0-pinned floor job, and Visual Studio
-2026 and 2022 jobs (the Xcode generator is unsupported — see Limitations).
+arm64, Windows x64 — every configuration on both CMake 3.30.0 and the
+latest CMake — including Visual Studio 2026 and 2022 jobs (the Xcode
+generator is unsupported — see Limitations).
 
 ## Usage
 

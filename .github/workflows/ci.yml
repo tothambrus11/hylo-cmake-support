@@ -14,55 +14,77 @@ env:
 
 jobs:
   build-and-test:
-    name: ${{ matrix.name }}
+    name: ${{ matrix.name }} / CMake ${{ matrix.cmake-version }}
     runs-on: ${{ matrix.os }}
     # An `experimental: true` job reports but does not gate (none currently).
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
+        # Every configuration runs against both ends of the supported CMake
+        # range: the floor (3.30.0, first with custom transitive properties)
+        # and the latest release.  `config` is the second axis; the include
+        # entries below attach each config's settings to both versions.
+        # (The hc floor, v0.0.8, is the matrix default already.)
+        cmake-version: ["3.30.0", "latest"]
+        config:
+          - linux-ninja
+          - linux-ninja-release
+          - linux-ninja-multi
+          - linux-make
+          - linux-arm64
+          - macos-arm64
+          - windows-ninja
+          - windows-vs2026
+          - windows-vs2022
+        exclude:
+          # CMake 3.30 predates the Visual Studio 2026 generator.
+          - config: windows-vs2026
+            cmake-version: "3.30.0"
         include:
-          - name: Linux x64 (Ninja, Debug)
+          - config: linux-ninja
+            name: Linux x64 (Ninja, Debug)
             os: ubuntu-24.04
             preset: default
-          - name: Linux x64 (Ninja, Release)
+          - config: linux-ninja-release
+            name: Linux x64 (Ninja, Release)
             os: ubuntu-24.04
             preset: release
-          - name: Linux x64 (Ninja Multi-Config)
+          - config: linux-ninja-multi
+            name: Linux x64 (Ninja Multi-Config)
             os: ubuntu-24.04
             preset: multi
             build-preset: multi-debug
             test-preset: multi-debug
-          - name: Linux x64 (Unix Makefiles)
+          - config: linux-make
+            name: Linux x64 (Unix Makefiles)
             os: ubuntu-24.04
             preset: make
-          # The floor: oldest supported CMake (3.30.0, first with custom
-          # transitive properties).  The hc floor (v0.0.8, the current stdlib
-          # bundle layout) is already the matrix default.
-          - name: Linux x64 (floor - CMake 3.30.0)
-            os: ubuntu-24.04
-            preset: default
-            cmake-version: 3.30.0
-          - name: Linux arm64 (Ninja, Debug)
+          - config: linux-arm64
+            name: Linux arm64 (Ninja, Debug)
             os: ubuntu-24.04-arm
             preset: default
           # Hylo macOS releases are built on macOS 26 (see setup-hylo's README).
-          - name: macOS arm64 (Ninja, Debug)
+          - config: macos-arm64
+            name: macOS arm64 (Ninja, Debug)
             os: macos-26
             preset: default
-          - name: Windows x64 (Ninja, Debug)
+          - config: windows-ninja
+            name: Windows x64 (Ninja, Debug)
             os: windows-latest
             preset: default
           # windows-latest is the windows-2025-vs2026 image (VS 2026, no 2022);
           # VS 2022 lives on the windows-2022 image.  The behaviour suite's VS
           # probe finds whichever is installed, so each job also runs the
           # dedicated generator test against its own VS.
-          - name: Windows x64 (Visual Studio 2026)
+          - config: windows-vs2026
+            name: Windows x64 (Visual Studio 2026)
             os: windows-latest
             preset: vs2026
             build-preset: vs2026-debug
             test-preset: vs2026-debug
-          - name: Windows x64 (Visual Studio 2022)
+          - config: windows-vs2022
+            name: Windows x64 (Visual Studio 2022)
             os: windows-2022
             preset: vs2022
             build-preset: vs2022-debug

@@ -5,8 +5,9 @@ Hylo with CMake: which properties must hold, how each is tested, what the CI
 matrix should look like, and which experiments are still needed to find the
 integration's real limits. Current state (2026-08-29, phase 1 of section 10
 implemented; phases 2–3 on 2026-08-29 as well): 17 behaviour tests + the
-randomized incremental fuzzer + exit-status tests; 10 PR CI jobs — hc v0.0.8
-default with a CMake-3.30.0 floor job and gating Visual Studio 2022/2026
+randomized incremental fuzzer + exit-status tests; 17 PR CI jobs — hc v0.0.8
+default, every config tested on both CMake 3.30.0 and latest (a matrix
+axis), gating Visual Studio 2022/2026
 jobs (Xcode: unsupported, curated diagnostic) — plus a Nightly workflow
 (toolchain variants, macOS x64, Windows arm64, CMake latestrc, latest-hc
 canary, aarch64+qemu cross job, fuzzer). The `probe_hash_precise` capability
@@ -53,8 +54,7 @@ toolchains × configs × cross-targets) is thousands of cells. Tier it:
 
 | version | why | tier |
 |---|---|---|
-| **3.30.0 exactly** | the documented floor; custom transitive properties were brand new there — the most likely place for behavior differences. Pin with `lukka/get-cmake`'s `cmakeVersion:` input. | 1 (one Linux job) |
-| latest stable (4.3.x) | what `get-cmake@latest` gives; the rest of the matrix runs on this | 1 |
+| **3.30.0 exactly** and **latest stable** | the two ends of the supported range, as a full matrix axis: **every PR config runs on both** (`cmake-version` × `config` in ci.yml; the one excluded cell is VS 2026 × 3.30, whose generator CMake 3.30 predates). Custom transitive properties were brand new in 3.30 — the most likely place for behavior differences. | 1 (every job) |
 | one middle version (3.31 or 4.0) | catches "worked at both ends, broke in the middle" (the 3.x→4.0 policy break) | 2 |
 | CMake `latestrc` | advisory only, in Nightly (get-cmake ships no dev-nightly builds; RCs are the earliest warning available) | 2 |
 | **3.28 (negative)** | `find_package(Hylo)` must die with the curated "requires CMake 3.30" message, not an obscure `define_property` error. Verified by hand (2026-08-29); not in CI — installing a second, older CMake per run is not worth the complexity. | manual |
