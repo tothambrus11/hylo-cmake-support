@@ -53,12 +53,21 @@ jobs:
           - name: Windows x64 (Ninja, Debug)
             os: windows-latest
             preset: default
-          # windows-latest is the windows-2025-vs2026 image: VS 2026, no 2022.
+          # windows-latest is the windows-2025-vs2026 image (VS 2026, no 2022);
+          # VS 2022 lives on the windows-2022 image.  The behaviour suite's VS
+          # probe finds whichever is installed, so each job also runs the
+          # dedicated generator test against its own VS.
           - name: Windows x64 (Visual Studio 2026, experimental)
             os: windows-latest
-            preset: vs
-            build-preset: vs-debug
-            test-preset: vs-debug
+            preset: vs2026
+            build-preset: vs2026-debug
+            test-preset: vs2026-debug
+            experimental: true
+          - name: Windows x64 (Visual Studio 2022, experimental)
+            os: windows-2022
+            preset: vs2022
+            build-preset: vs2022-debug
+            test-preset: vs2022-debug
             experimental: true
     steps:
       - uses: actions/checkout@v4

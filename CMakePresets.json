@@ -35,11 +35,19 @@
             "binaryDir": "${sourceDir}/build-make"
         },
         {
-            "name": "vs",
+            "name": "vs2026",
             "inherits": "default",
             "displayName": "Hylo (Visual Studio 2026)",
             "generator": "Visual Studio 18 2026",
-            "binaryDir": "${sourceDir}/build-vs",
+            "binaryDir": "${sourceDir}/build-vs2026",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
+            "name": "vs2022",
+            "inherits": "default",
+            "displayName": "Hylo (Visual Studio 2022)",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build-vs2022",
             "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
         }
     ],
@@ -49,13 +57,15 @@
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug" },
         { "name": "multi-release", "configurePreset": "multi", "configuration": "Release" },
         { "name": "make", "configurePreset": "make" },
-        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug" }
+        { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug" },
+        { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug" }
     ],
     "testPresets": [
         { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
         { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug", "output": { "outputOnFailure": true } },
         { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } },
-        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug", "output": { "outputOnFailure": true } }
+        { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug", "output": { "outputOnFailure": true } },
+        { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } }
     ]
 }

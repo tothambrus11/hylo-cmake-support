@@ -15,9 +15,9 @@ layout, hylo-new#523; the CLI surface used here — `--module-search-path`,
 `--import`, `--emit-module-to`, `--emit-module-interface-hash-to`,
 `--version` — dates from 0.0.6, but the older layouts are not supported) and
 **CMake ≥ 3.30**, tested through CMake 4.3. CI: Linux x64/arm64, macOS
-arm64, Windows x64, a CMake-3.30.0-pinned floor job, and an
-experimental Visual Studio 2026 job (the Xcode generator is unsupported —
-see Limitations).
+arm64, Windows x64, a CMake-3.30.0-pinned floor job, and
+experimental Visual Studio 2026 and 2022 jobs (the Xcode generator is
+unsupported — see Limitations).
 
 ## Usage
 
@@ -162,8 +162,8 @@ imports), because hc loads transitive archives and may inline their layouts.
   fails at configure time with a curated message pointing at Ninja Multi-Config
   (`behaviour.generator-xcode` asserts the diagnostic).
 - Visual Studio: under evaluation — a dedicated behaviour test (`behaviour.generator-visual-studio`: both
-  configurations build, run, and an edit propagates, against whichever VS is installed) and an experimental CI job
-  (VS 2026); nothing here is Ninja-specific except the `restat` pruning. Unix Makefiles
+  configurations build, run, and an edit propagates, against whichever VS is installed) and experimental CI jobs
+  (VS 2026 on windows-latest, VS 2022 on the windows-2022 image); nothing here is Ninja-specific except the `restat` pruning. Unix Makefiles
   are tested, and Windows with MSVC + Ninja is covered by CI (hc's COFF objects link with `link.exe`; the runtime forces
   the shim object in so a C runtime is always selected).
 
