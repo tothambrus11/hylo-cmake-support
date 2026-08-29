@@ -11,7 +11,8 @@ axis), gating Visual Studio 2022/2026
 jobs (Xcode: unsupported, curated diagnostic) — plus a Nightly workflow
 (toolchain variants, macOS x64, Windows arm64, CMake latestrc, latest-hc
 canary, aarch64+qemu cross job, fuzzer). The `probe_hash_precise` capability
-probe drives the incremental assertions and is printed in every CI run.
+probe drives the incremental assertions and reports its verdict in their
+output.
 Remaining hand experiments: MinGW, case-collision (§7).
 
 ## 1. The invariants

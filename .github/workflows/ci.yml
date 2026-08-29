@@ -117,21 +117,6 @@ jobs:
           hc --print-stdlib-root
           cmake --version | head -1
           ninja --version
-          # Interface-hash precision probe (notes/TESTING-STRATEGY.md, 3.2):
-          # the behaviour tests branch their expected recompile sets on this,
-          # and the day it flips to ON, hylo-new#321 has landed.
-          d="$RUNNER_TEMP/hash-probe"; mkdir -p "$d/cache"
-          for body in 1 2; do
-            echo "public fun p() -> Int32 { $body }" > "$d/P.hylo"
-            hc --module-name P --module-cache "$d/cache" --emit object -o "$d/P.o" \
-               --emit-module-to "$d/P.hylomodule" \
-               --emit-module-interface-hash-to "$d/P$body.iface" "$d/P.hylo"
-          done
-          if cmp -s "$d/P1.iface" "$d/P2.iface"; then
-            echo "HASH_PRECISE=ON (interface-only hash)"
-          else
-            echo "HASH_PRECISE=OFF (whole-archive hash)"
-          fi
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
