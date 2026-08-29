@@ -90,23 +90,23 @@ jobs:
             build-preset: vs2022-debug
             test-preset: vs2022-debug
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up MSVC environment (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
       # Pinned CMake + Ninja; FindHylo needs CMake >= 3.30.  The get-cmake
       # release tag doubles as the CMake catalog: what the matrix calls
       # "latest" is the version this pinned release ships, so a Dependabot
       # bump of the action is also the CMake upgrade.
-      - uses: lukka/get-cmake@v4.4.2
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
         with:
           cmakeVersion: ${{ matrix.cmake-version || 'latest' }}
 
       - name: Install Hylo ${{ matrix.hylo-version || env.HYLO_VERSION }}
         id: hylo
-        uses: hylo-lang/setup-hylo@v1.0.0
+        uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: v${{ matrix.hylo-version || env.HYLO_VERSION }}
 
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload behaviour-test work directories
         if: failure()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: behaviour-workdirs-${{ strategy.job-index }}
           path: |

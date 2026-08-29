@@ -46,13 +46,13 @@ jobs:
             hylo-latest: true
             advisory: true
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up MSVC environment (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
-      - uses: lukka/get-cmake@v4.4.2
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
         with:
           cmakeVersion: ${{ matrix.cmake-version || 'latest' }}
 
@@ -64,7 +64,7 @@ jobs:
         run: echo "tag=$(gh api repos/hylo-lang/hylo-new/releases/latest -q .tag_name)" >> "$GITHUB_OUTPUT"
 
       - name: Install Hylo
-        uses: hylo-lang/setup-hylo@v1.0.0
+        uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: ${{ steps.latest-hylo.outputs.tag || format('v{0}', env.HYLO_VERSION) }}
 
@@ -90,9 +90,9 @@ jobs:
     name: Linux x64 -> aarch64 (qemu)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: lukka/get-cmake@v4.4.2
-      - uses: hylo-lang/setup-hylo@v1.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: v${{ env.HYLO_VERSION }}
       - name: Install cross toolchain and qemu
@@ -117,9 +117,9 @@ jobs:
     name: Randomized incremental fuzz
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: lukka/get-cmake@v4.4.2
-      - uses: hylo-lang/setup-hylo@v1.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: v${{ env.HYLO_VERSION }}
       - name: Configure
@@ -132,7 +132,7 @@ jobs:
         run: ctest --test-dir build -L fuzz --output-on-failure
       - name: Upload fuzz work directory
         if: failure()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-workdir
           path: |
