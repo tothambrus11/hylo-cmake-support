@@ -16,7 +16,7 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    # Experimental jobs (new generators) report but do not gate.
+    # An `experimental: true` job reports but does not gate (none currently).
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
@@ -57,18 +57,16 @@ jobs:
           # VS 2022 lives on the windows-2022 image.  The behaviour suite's VS
           # probe finds whichever is installed, so each job also runs the
           # dedicated generator test against its own VS.
-          - name: Windows x64 (Visual Studio 2026, experimental)
+          - name: Windows x64 (Visual Studio 2026)
             os: windows-latest
             preset: vs2026
             build-preset: vs2026-debug
             test-preset: vs2026-debug
-            experimental: true
-          - name: Windows x64 (Visual Studio 2022, experimental)
+          - name: Windows x64 (Visual Studio 2022)
             os: windows-2022
             preset: vs2022
             build-preset: vs2022-debug
             test-preset: vs2022-debug
-            experimental: true
     steps:
       - uses: actions/checkout@v4
 

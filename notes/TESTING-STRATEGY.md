@@ -5,8 +5,8 @@ Hylo with CMake: which properties must hold, how each is tested, what the CI
 matrix should look like, and which experiments are still needed to find the
 integration's real limits. Current state (2026-08-29, phase 1 of section 10
 implemented): 14 behaviour tests + exit-status tests; 10 CI jobs — hc v0.0.8
-default with a floors job (CMake 3.30.0 + hc v0.0.6 + the below-floor
-negative) and experimental Visual Studio 2022 / Xcode jobs; the
+default with a CMake-3.30.0 floor job and gating Visual Studio 2022/2026
+jobs (Xcode: unsupported, curated diagnostic); the
 `probe_hash_precise` capability probe drives the incremental assertions and
 is printed in every CI run. Still missing: cross-compilation (phase 2),
 the nightly tier (phase 3).
@@ -89,7 +89,7 @@ supported OS. Nothing in the integration is generator-specific except restat
 | Ninja | full suite | keep (tier 1) | — |
 | Ninja Multi-Config | full suite + dedicated test | keep (tier 1) | — |
 | Unix Makefiles | dedicated test (Linux, macOS) | keep (tier 1) | no restat → over-rebuild, accepted |
-| **Visual Studio** | dedicated test (probes the installed VS — `cmake -E capabilities` lists supported names, not instances) + experimental CI jobs for **VS 2026** (windows-latest) and **VS 2022** (windows-2022 image) | promote to gating once green (2026 was green on first run, 2026-08-29) | multi-output custom commands become MSBuild CustomBuild steps — supported, but: no restat; `--verbose` output format differs, so the `hc_command` grep in `per-config-flags` needs an msbuild-aware matcher (or that test stays Ninja-only and VS gets its own per-config assert via `-- /v:d` or checking the generated `.vcxproj`); per-project parallelism only |
+| **Visual Studio** | **supported** — dedicated test (probes the installed VS — `cmake -E capabilities` lists supported names, not instances) + gating CI jobs for **VS 2026** (windows-latest) and **VS 2022** (windows-2022 image), promoted 2026-08-29 |  | multi-output custom commands become MSBuild CustomBuild steps — supported, but: no restat; `--verbose` output format differs, so the `hc_command` grep in `per-config-flags` needs an msbuild-aware matcher (or that test stays Ninja-only and VS gets its own per-config assert via `-- /v:d` or checking the generated `.vcxproj`); per-project parallelism only |
 | **Xcode** | **verdict reached (2026-08-29): unsupported** | negative test asserts the curated diagnostic | the experiment never got to the external-object question: Xcode has no per-config sources, so the per-configuration object path (`$<CONFIG>`) dies at generate time with a literal `NOCONFIG`. `hylo_target_module` now fails at configure with a curated message; README documents it. |
 | NMake Makefiles | untested | tier 2 (Windows) | slow, single-config; expected to just work |
 | MinGW Makefiles | untested | tier 3, with the MinGW toolchain experiment | — |
