@@ -13,8 +13,12 @@ assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
   "the triple must reach the hc command lines")
 
 # Build just the Hylo object (the host C toolchain cannot link aarch64).
+set(_obj "diamond/CMakeFiles/Base.hylo.dir/Base.o")
+if(WIN32)   # CMAKE_C_OUTPUT_EXTENSION
+  set(_obj "diamond/CMakeFiles/Base.hylo.dir/Base.obj")
+endif()
 execute_process(
-  COMMAND "${NINJA}" -C "${WORK_DIR}/build" "diamond/CMakeFiles/Base.hylo.dir/Base.o"
+  COMMAND "${NINJA}" -C "${WORK_DIR}/build" "${_obj}"
   RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
 if(NOT _r EQUAL 0)
   message(FATAL_ERROR "cross object build failed (${_r}):\n${_o}\n${_e}")
@@ -22,7 +26,7 @@ endif()
 
 # ELF header: magic, 64-bit class, e_machine (offset 18, little endian) 0xB7 =
 # AArch64.
-file(READ "${WORK_DIR}/build/diamond/CMakeFiles/Base.hylo.dir/Base.o" _hdr LIMIT 20 HEX)
+file(READ "${WORK_DIR}/build/${_obj}" _hdr LIMIT 20 HEX)
 if(NOT _hdr MATCHES "^7f454c4602")
   message(FATAL_ERROR "Base.o is not a 64-bit ELF object (header ${_hdr})")
 endif()
@@ -32,8 +36,12 @@ if(NOT _machine STREQUAL "b700")
 endif()
 
 # The CMAKE_C_COMPILER_TARGET default: used when Hylo_TARGET_TRIPLE is unset...
+# CMAKE_TRY_COMPILE_TARGET_TYPE: clang-based hosts honour the target during
+# the C ABI check and then cannot link host binaries; compiling to a static
+# library sidesteps the link.
 fixture_configure(BUILD_DIR "${WORK_DIR}/build-default"
-  ARGS "-DCMAKE_C_COMPILER_TARGET=aarch64-unknown-linux-gnu")
+  ARGS "-DCMAKE_C_COMPILER_TARGET=aarch64-unknown-linux-gnu"
+       "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY")
 file(READ "${WORK_DIR}/build-default/build.ninja" _ninja)
 assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
   "CMAKE_C_COMPILER_TARGET must become the default triple")
@@ -41,6 +49,7 @@ assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
 # ...and beaten by an explicit Hylo_TARGET_TRIPLE.
 fixture_configure(BUILD_DIR "${WORK_DIR}/build-override"
   ARGS "-DCMAKE_C_COMPILER_TARGET=aarch64-unknown-linux-gnu"
+       "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
        "-DHylo_TARGET_TRIPLE=armv5te-unknown-linux-gnueabi")
 file(READ "${WORK_DIR}/build-override/build.ninja" _ninja)
 assert_contains("${_ninja}" "--target armv5te-unknown-linux-gnueabi"
