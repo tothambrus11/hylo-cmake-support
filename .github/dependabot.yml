@@ -1,0 +1,10 @@
+# Keeps the pinned workflow dependencies current.  Every action is pinned to
+# an exact release (including lukka/get-cmake, whose release tag decides what
+# the CI matrix's "latest" CMake resolves to), so these bumps are the one
+# upgrade path.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
