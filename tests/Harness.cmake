@@ -97,8 +97,10 @@ function(assert_not_contains text needle why)
   endif()
 endfunction()
 
+# Extra arguments, if any, are prepended to the command line (an emulator for
+# cross-built fixtures).
 function(assert_exit exe expected)
-  execute_process(COMMAND "${exe}" RESULT_VARIABLE _r)
+  execute_process(COMMAND ${ARGN} "${exe}" RESULT_VARIABLE _r)
   if(NOT _r STREQUAL expected)
     message(FATAL_ERROR "${exe}: expected exit status ${expected}, got ${_r}")
   endif()

@@ -15,6 +15,8 @@ enable_testing()
 function(add_exit_status_test name target expected)
   add_test(NAME ${name} COMMAND ${CMAKE_COMMAND}
     -DEXE=$<TARGET_FILE:${target}> -DEXPECT=${expected}
+    # The target's emulator (qemu & co.), so cross-built tests run too.
+    "-DEMULATOR=$<TARGET_PROPERTY:${target},CROSSCOMPILING_EMULATOR>"
     -P "${CMAKE_SOURCE_DIR}/cmake/RunExpectExit.cmake")
 endfunction()
 

@@ -1,0 +1,48 @@
+# Cross-compilation fidelity (no cross C toolchain needed): the target triple
+# reaches every hc command line, Hylo_TARGET_TRIPLE beats the
+# CMAKE_C_COMPILER_TARGET default, and the object hc emits is really for the
+# target architecture (ELF e_machine, checked with pure CMake).  Execution
+# under qemu is the nightly cross job's business.  Ninja only (the build.ninja
+# grep and single-object build).
+include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
+fixture_create(diamond)
+
+fixture_configure(ARGS "-DHylo_TARGET_TRIPLE=aarch64-unknown-linux-gnu")
+file(READ "${WORK_DIR}/build/build.ninja" _ninja)
+assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
+  "the triple must reach the hc command lines")
+
+# Build just the Hylo object (the host C toolchain cannot link aarch64).
+execute_process(
+  COMMAND "${NINJA}" -C "${WORK_DIR}/build" "diamond/CMakeFiles/Base.hylo.dir/Base.o"
+  RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
+if(NOT _r EQUAL 0)
+  message(FATAL_ERROR "cross object build failed (${_r}):\n${_o}\n${_e}")
+endif()
+
+# ELF header: magic, 64-bit class, e_machine (offset 18, little endian) 0xB7 =
+# AArch64.
+file(READ "${WORK_DIR}/build/diamond/CMakeFiles/Base.hylo.dir/Base.o" _hdr LIMIT 20 HEX)
+if(NOT _hdr MATCHES "^7f454c4602")
+  message(FATAL_ERROR "Base.o is not a 64-bit ELF object (header ${_hdr})")
+endif()
+string(SUBSTRING "${_hdr}" 36 4 _machine)
+if(NOT _machine STREQUAL "b700")
+  message(FATAL_ERROR "Base.o e_machine is ${_machine}, expected b700 (AArch64)")
+endif()
+
+# The CMAKE_C_COMPILER_TARGET default: used when Hylo_TARGET_TRIPLE is unset...
+fixture_configure(BUILD_DIR "${WORK_DIR}/build-default"
+  ARGS "-DCMAKE_C_COMPILER_TARGET=aarch64-unknown-linux-gnu")
+file(READ "${WORK_DIR}/build-default/build.ninja" _ninja)
+assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
+  "CMAKE_C_COMPILER_TARGET must become the default triple")
+
+# ...and beaten by an explicit Hylo_TARGET_TRIPLE.
+fixture_configure(BUILD_DIR "${WORK_DIR}/build-override"
+  ARGS "-DCMAKE_C_COMPILER_TARGET=aarch64-unknown-linux-gnu"
+       "-DHylo_TARGET_TRIPLE=armv5te-unknown-linux-gnueabi")
+file(READ "${WORK_DIR}/build-override/build.ninja" _ninja)
+assert_contains("${_ninja}" "--target armv5te-unknown-linux-gnueabi"
+  "an explicit Hylo_TARGET_TRIPLE must win")
+assert_not_contains("${_ninja}" "--target aarch64" "the default must not also apply")

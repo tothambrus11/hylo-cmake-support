@@ -4,12 +4,14 @@ What it takes to trust `FindHylo.cmake`/`HyloTargets.cmake` as *the* way to buil
 Hylo with CMake: which properties must hold, how each is tested, what the CI
 matrix should look like, and which experiments are still needed to find the
 integration's real limits. Current state (2026-08-29, phase 1 of section 10
-implemented): 14 behaviour tests + exit-status tests; 10 CI jobs — hc v0.0.8
+implemented; phases 2–3 on 2026-08-29 as well): 17 behaviour tests + the
+randomized incremental fuzzer + exit-status tests; 10 PR CI jobs — hc v0.0.8
 default with a CMake-3.30.0 floor job and gating Visual Studio 2022/2026
-jobs (Xcode: unsupported, curated diagnostic); the
-`probe_hash_precise` capability probe drives the incremental assertions and
-is printed in every CI run. Still missing: cross-compilation (phase 2),
-the nightly tier (phase 3).
+jobs (Xcode: unsupported, curated diagnostic) — plus a Nightly workflow
+(toolchain variants, macOS x64, Windows arm64, CMake latestrc, latest-hc
+canary, aarch64+qemu cross job, fuzzer). The `probe_hash_precise` capability
+probe drives the incremental assertions and is printed in every CI run.
+Remaining hand experiments: MinGW, case-collision (§7).
 
 ## 1. The invariants
 
@@ -54,7 +56,7 @@ toolchains × configs × cross-targets) is thousands of cells. Tier it:
 | **3.30.0 exactly** | the documented floor; custom transitive properties were brand new there — the most likely place for behavior differences. Pin with `lukka/get-cmake`'s `cmakeVersion:` input. | 1 (one Linux job) |
 | latest stable (4.3.x) | what `get-cmake@latest` gives; the rest of the matrix runs on this | 1 |
 | one middle version (3.31 or 4.0) | catches "worked at both ends, broke in the middle" (the 3.x→4.0 policy break) | 2 |
-| CMake `dev` nightly | advisory only (`continue-on-error: true`); early warning when upstream changes custom-command/restat behavior | 2 |
+| CMake `latestrc` | advisory only, in Nightly (get-cmake ships no dev-nightly builds; RCs are the earliest warning available) | 2 |
 | **3.28 (negative)** | `find_package(Hylo)` must die with the curated "requires CMake 3.30" message, not an obscure `define_property` error. Verified by hand (2026-08-29); not in CI — installing a second, older CMake per run is not worth the complexity. | manual |
 
 Also once per release cycle: configure with `-Wdev --warn-uninitialized` and
@@ -70,12 +72,12 @@ matrix is bounded by GitHub runners, not by hc.
 | cell | C toolchain | status |
 |---|---|---|
 | Linux x64, arm64 | gcc (default) | in CI |
-| Linux x64 + **clang** | clang | add, tier 2 — one `CC=clang` job; cheap, catches gcc-isms in the shim/link step |
+| Linux x64 + **clang** | clang | in Nightly |
 | macOS arm64 (macos-26) | AppleClang | in CI |
-| **macOS x64** | AppleClang | add, tier 2 (`macos-15-intel`, or `macos-13`) — the hc `macos-x64` asset is otherwise entirely unexercised |
+| **macOS x64** | AppleClang | in Nightly (`macos-26-intel`) |
 | Windows x64 | MSVC | in CI |
-| **Windows arm64** | MSVC arm64 | add, tier 2 (`windows-11-arm` runner) — second untouched hc asset; also the only cell where the MSVC force-link fix runs on a non-x64 CRT |
-| Windows x64 + **clang-cl** | clang-cl | tier 2 — validates that the `/INCLUDE:c_malloc_indirect` force-link (fd49534) is not MSVC-linker-specific |
+| **Windows arm64** | MSVC arm64 | in Nightly (`windows-11-arm`) — the only cell where the MSVC force-link fix runs on a non-x64 CRT |
+| Windows x64 + **clang-cl** | clang-cl | in Nightly — validates that the `/INCLUDE:c_malloc_indirect` force-link (fd49534) is not MSVC-linker-specific |
 | Windows + MinGW | gcc/COFF | tier 3 experiment: hc emits COFF via LLVM, so MinGW ld *should* link it; nobody has tried. Outcome → README either way. |
 
 ### 2.3 Generators
@@ -91,7 +93,7 @@ supported OS. Nothing in the integration is generator-specific except restat
 | Unix Makefiles | dedicated test (Linux, macOS) | keep (tier 1) | no restat → over-rebuild, accepted |
 | **Visual Studio** | **supported** — dedicated test (probes the installed VS — `cmake -E capabilities` lists supported names, not instances) + gating CI jobs for **VS 2026** (windows-latest) and **VS 2022** (windows-2022 image), promoted 2026-08-29 |  | multi-output custom commands become MSBuild CustomBuild steps — supported, but: no restat; `--verbose` output format differs, so the `hc_command` grep in `per-config-flags` needs an msbuild-aware matcher (or that test stays Ninja-only and VS gets its own per-config assert via `-- /v:d` or checking the generated `.vcxproj`); per-project parallelism only |
 | **Xcode** | **verdict reached (2026-08-29): unsupported** | negative test asserts the curated diagnostic | the experiment never got to the external-object question: Xcode has no per-config sources, so the per-configuration object path (`$<CONFIG>`) dies at generate time with a literal `NOCONFIG`. `hylo_target_module` now fails at configure with a curated message; README documents it. |
-| NMake Makefiles | untested | tier 2 (Windows) | slow, single-config; expected to just work |
+| NMake Makefiles | in Nightly | — | slow, single-config |
 | MinGW Makefiles | untested | tier 3, with the MinGW toolchain experiment | — |
 | VS + `-T ClangCL`, Watcom, Borland, Green Hills | — | out of scope; say so in README | — |
 
@@ -387,9 +389,19 @@ step so the transition is visible in logs.
    §3.2 `probe_hash_precise` restructure of `incremental-interface-hash`;
    `behaviour.flag-change-rebuild` and `behaviour.transitive-options`;
    interface-removal mutation.
-2. **Cross**: emulator support in `RunExpectExit`/`assert_exit`; toolchain-file
-   fidelity test; aarch64 + qemu job.
-3. **Nightly tier**: DAG fuzzer, hc-HEAD canary with the `HASH_PRECISE` probe,
-   CMake `dev`, clang/clang-cl/NMake jobs, macOS x64 and Windows arm64 jobs.
-4. **Experiments**: MinGW, paths-with-spaces & friends, case-collision —
-   verdicts into README's Limitations.
+2. **DONE (2026-08-29)**: `RunExpectExit`/`assert_exit` honour an emulator
+   (each target's `CROSSCOMPILING_EMULATOR`); `behaviour.cross-target`
+   (triple fidelity + pure-CMake ELF `e_machine` check, no cross C toolchain
+   needed — runs in every PR job); nightly `cross-aarch64` job
+   (`tests/toolchains/aarch64-linux-gnu.cmake`, gcc-aarch64 + qemu-user,
+   exit-status tests run under qemu).
+3. **DONE (2026-08-29)**: `.github/workflows/nightly.yml` — the DAG fuzzer
+   (`tests/fuzz-incremental.cmake` behind `-DHYLO_FUZZ=ON`, seeded/replayable,
+   oracle = from-scratch build), clang, clang-cl, NMake, macOS x64
+   (macos-26-intel), Windows arm64 (windows-11-arm), CMake `latestrc`
+   (advisory; get-cmake has no dev-nightly builds), and a latest-hc-release
+   canary (an hc-HEAD canary needs nightly hc artifacts, which don't exist
+   yet). `behaviour.development-version` pins the §6 policy with a stub hc.
+4. **Experiments**: paths-with-spaces is a permanent behaviour test
+   (`behaviour.paths-with-spaces`); MinGW and case-collision remain hand
+   experiments — verdicts into README's Limitations.

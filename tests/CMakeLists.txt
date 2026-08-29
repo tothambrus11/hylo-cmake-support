@@ -49,15 +49,29 @@ if(HYLO_TEST_GENERATOR STREQUAL "Ninja")
   add_behaviour_test(mixed-c-partial-rebuild)
   add_behaviour_test(late-target-sources)
   add_behaviour_test(flag-change-rebuild)
+  add_behaviour_test(cross-target)
 endif()
 add_behaviour_test(import-visibility)
 add_behaviour_test(toolchain-swap)
 add_behaviour_test(per-config-flags)
 add_behaviour_test(transitive-options)
+add_behaviour_test(paths-with-spaces)
 add_behaviour_test(project-manifest)
 add_behaviour_test(install-export)
 if(NOT WIN32)
   add_behaviour_test(package-config)   # uses a symlink to stand in for an installed toolchain
+  add_behaviour_test(development-version)   # the stub compiler is a shell script
+endif()
+
+# Randomized incremental fuzzing: nightly, not per-PR (opt in, own label, no
+# parallel sibling -- it measures rebuild minimality).  FUZZ_SEED/-ITERATIONS
+# come from the environment at configure time; the seed is printed for replay.
+option(HYLO_FUZZ "Register the randomized incremental fuzz test" OFF)
+if(HYLO_FUZZ AND HYLO_TEST_GENERATOR STREQUAL "Ninja")
+  add_behaviour_test(fuzz-incremental
+    ARGS "-DFUZZ_SEED=$ENV{FUZZ_SEED}" "-DFUZZ_ITERATIONS=$ENV{FUZZ_ITERATIONS}")
+  set_tests_properties(behaviour.fuzz-incremental PROPERTIES
+    LABELS "fuzz" TIMEOUT 3000 RUN_SERIAL TRUE)
 endif()
 if(HYLO_TEST_NINJA)
   add_behaviour_test(generator-ninja-multi-config)
