@@ -1,21 +1,16 @@
-# Xcode generator: the module's custom command becomes a script phase.  The
-# real risk is the external object -- Xcode is the one generator that rewrites
-# object locations (HasKnownObjectFileLocation() is false), so a fixed-path
-# external object linking correctly is exactly what this asserts.  Both
-# configurations build from one tree and run; an edit must propagate.
+# Xcode generator: NOT supported, by CMake's design rather than ours -- Xcode
+# is the one generator without per-config sources, and the module's object is
+# a generated per-configuration source ($<CONFIG> in its path; left as the
+# literal "NOCONFIG" by the Xcode generator).  What this asserts is the
+# curated configure-time diagnostic, not a build.
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
-fixture_create(diamond multi-module)
-fixture_configure(GENERATOR "Xcode")
-fixture_build(out CONFIG Debug)
-assert_build_ok(out)
-fixture_build(out CONFIG Release)
-assert_build_ok(out)
-assert_exit("${WORK_DIR}/build/diamond/Debug/diamond" 23)
-assert_exit("${WORK_DIR}/build/diamond/Release/diamond" 23)
-assert_exit("${WORK_DIR}/build/multi-module/Release/multi" 42)
-
-# An edit propagates.
-file(WRITE "${WORK_DIR}/src/diamond/Base.hylo" "public fun base() -> Int32 { 24 }\n")
-fixture_build(out CONFIG Debug)
-assert_build_ok(out)
-assert_exit("${WORK_DIR}/build/diamond/Debug/diamond" 24)
+fixture_create(diamond)
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -S "${WORK_DIR}/src" -B "${WORK_DIR}/build" -G Xcode
+    "-DHylo_COMPILER=${Hylo_COMPILER}"
+  RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
+if(_r EQUAL 0)
+  message(FATAL_ERROR "configuring with the Xcode generator unexpectedly succeeded:\n${_o}")
+endif()
+assert_contains("${_o}${_e}" "the Xcode generator is not supported"
+  "unsupported generator must fail with the curated message")

@@ -50,16 +50,11 @@ jobs:
           - name: macOS arm64 (Ninja, Debug)
             os: macos-26
             preset: default
-          - name: macOS arm64 (Xcode, experimental)
-            os: macos-26
-            preset: xcode
-            build-preset: xcode-debug
-            test-preset: xcode-debug
-            experimental: true
           - name: Windows x64 (Ninja, Debug)
             os: windows-latest
             preset: default
-          - name: Windows x64 (Visual Studio 2022, experimental)
+          # windows-latest is the windows-2025-vs2026 image: VS 2026, no 2022.
+          - name: Windows x64 (Visual Studio 2026, experimental)
             os: windows-latest
             preset: vs
             build-preset: vs-debug

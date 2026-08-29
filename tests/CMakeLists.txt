@@ -66,15 +66,36 @@ if(HYLO_TEST_MAKE AND NOT WIN32)
   add_behaviour_test(generator-unix-makefiles)
 endif()
 
-# The IDE generators, where CMake can produce them (their fixtures build both
-# configurations and MSBuild/xcodebuild are slow: a longer timeout).
-execute_process(COMMAND "${CMAKE_COMMAND}" -E capabilities
-  OUTPUT_VARIABLE _hylo_cmake_capabilities ERROR_QUIET)
-if(WIN32 AND _hylo_cmake_capabilities MATCHES "Visual Studio 17 2022")
-  add_behaviour_test(generator-visual-studio)
-  set_tests_properties(behaviour.generator-visual-studio PROPERTIES TIMEOUT 600)
+# Visual Studio, if one is installed.  `cmake -E capabilities` lists the
+# generator names CMake *supports*, not the VS instances present (bit us on
+# windows-latest, which now carries only VS 2026), so probe by configuring a
+# trivial project.  The fixture builds both configurations with MSBuild:
+# a longer timeout.
+if(WIN32)
+  set(_hylo_vs_generator "")
+  set(_hylo_vs_probe "${CMAKE_CURRENT_BINARY_DIR}/vs-probe")
+  foreach(_vs "Visual Studio 18 2026" "Visual Studio 17 2022")
+    file(REMOVE_RECURSE "${_hylo_vs_probe}")
+    file(WRITE "${_hylo_vs_probe}/CMakeLists.txt"
+      "cmake_minimum_required(VERSION 3.30)\nproject(probe NONE)\n")
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" -S "${_hylo_vs_probe}" -B "${_hylo_vs_probe}/build" -G "${_vs}"
+      RESULT_VARIABLE _hylo_vs_result OUTPUT_QUIET ERROR_QUIET)
+    if(_hylo_vs_result EQUAL 0)
+      set(_hylo_vs_generator "${_vs}")
+      break()
+    endif()
+  endforeach()
+  if(_hylo_vs_generator)
+    add_behaviour_test(generator-visual-studio ARGS "-DVS_GENERATOR=${_hylo_vs_generator}")
+    set_tests_properties(behaviour.generator-visual-studio PROPERTIES TIMEOUT 600)
+  else()
+    message(STATUS "No Visual Studio instance found; behaviour.generator-visual-studio not registered")
+  endif()
 endif()
-if(APPLE AND _hylo_cmake_capabilities MATCHES "Xcode")
+
+# Xcode is not supported (no per-config sources); the test asserts the
+# curated configure-time diagnostic.
+if(APPLE)
   add_behaviour_test(generator-xcode)
-  set_tests_properties(behaviour.generator-xcode PROPERTIES TIMEOUT 600)
 endif()

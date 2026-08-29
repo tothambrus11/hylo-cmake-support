@@ -206,6 +206,17 @@ function(hylo_target_module target)
     message(FATAL_ERROR "hylo_target_module: '${target}' is not a target")
   endif()
 
+  # A Hylo module's object is a generated, per-configuration source (its path
+  # contains $<CONFIG>), and Xcode is the one generator without per-config
+  # sources: it evaluates the path with the literal configuration "NOCONFIG"
+  # and fails on the missing file (observed with CMake 4.3 / Xcode 26).
+  if(CMAKE_GENERATOR STREQUAL "Xcode")
+    message(FATAL_ERROR
+      "hylo_target_module(${target}): the Xcode generator is not supported (it has no "
+      "per-config sources, which the module's per-configuration object requires). "
+      "Use the Ninja Multi-Config generator instead.")
+  endif()
+
   get_target_property(_type ${target} TYPE)
   if(_type STREQUAL "OBJECT_LIBRARY")
     message(FATAL_ERROR

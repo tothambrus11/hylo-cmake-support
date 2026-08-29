@@ -37,18 +37,10 @@
         {
             "name": "vs",
             "inherits": "default",
-            "displayName": "Hylo (Visual Studio 2022)",
-            "generator": "Visual Studio 17 2022",
+            "displayName": "Hylo (Visual Studio 2026)",
+            "generator": "Visual Studio 18 2026",
             "binaryDir": "${sourceDir}/build-vs",
             "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
-        },
-        {
-            "name": "xcode",
-            "inherits": "default",
-            "displayName": "Hylo (Xcode)",
-            "generator": "Xcode",
-            "binaryDir": "${sourceDir}/build-xcode",
-            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
         }
     ],
     "buildPresets": [
@@ -57,15 +49,13 @@
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug" },
         { "name": "multi-release", "configurePreset": "multi", "configuration": "Release" },
         { "name": "make", "configurePreset": "make" },
-        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug" },
-        { "name": "xcode-debug", "configurePreset": "xcode", "configuration": "Debug" }
+        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug" }
     ],
     "testPresets": [
         { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
         { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug", "output": { "outputOnFailure": true } },
         { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } },
-        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug", "output": { "outputOnFailure": true } },
-        { "name": "xcode-debug", "configurePreset": "xcode", "configuration": "Debug", "output": { "outputOnFailure": true } }
+        { "name": "vs-debug", "configurePreset": "vs", "configuration": "Debug", "output": { "outputOnFailure": true } }
     ]
 }

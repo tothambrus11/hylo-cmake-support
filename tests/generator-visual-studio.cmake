@@ -1,10 +1,11 @@
-# Visual Studio generator: the module's multi-output custom command becomes an
-# MSBuild CustomBuild step and the object links as an external object.  Both
+# Visual Studio generator (the installed version, probed and passed in as
+# VS_GENERATOR): the module's multi-output custom command becomes an MSBuild
+# CustomBuild step and the object links as an external object.  Both
 # configurations build from one tree and run.  MSBuild has no restat, so
 # over-rebuild is acceptable; an edit must still propagate (soundness).
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 fixture_create(diamond multi-module)
-fixture_configure(GENERATOR "Visual Studio 17 2022")
+fixture_configure(GENERATOR "${VS_GENERATOR}")
 fixture_build(out CONFIG Debug)
 assert_build_ok(out)
 fixture_build(out CONFIG Release)
