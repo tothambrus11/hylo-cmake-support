@@ -1,6 +1,6 @@
 # The CMake support can be shipped inside a toolchain as a package config:
 # with <root>/lib/cmake/Hylo/{HyloConfig,HyloConfigVersion,FindHylo,HyloTargets}.cmake
-# and <root>/bin/hc, `find_package(Hylo 0.0.6 REQUIRED)` works from
+# and <root>/bin/hc, `find_package(Hylo 0.0.8 REQUIRED)` works from
 # CMAKE_PREFIX_PATH alone, with no CMAKE_MODULE_PATH and no hc on PATH.
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 file(REMOVE_RECURSE "${WORK_DIR}")
@@ -22,7 +22,7 @@ file(COPY "${SOURCE_DIR}/examples/diamond" DESTINATION "${WORK_DIR}/src")
 file(WRITE "${WORK_DIR}/src/CMakeLists.txt" "
 cmake_minimum_required(VERSION 3.30)
 project(PkgConfigFixture LANGUAGES C)
-find_package(Hylo 0.0.6 REQUIRED)      # no CMAKE_MODULE_PATH: must come from the prefix
+find_package(Hylo 0.0.8 REQUIRED)      # no CMAKE_MODULE_PATH: must come from the prefix
 function(add_exit_status_test)
 endfunction()
 add_subdirectory(diamond)

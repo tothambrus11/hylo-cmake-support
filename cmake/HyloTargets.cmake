@@ -154,14 +154,13 @@ define_property(TARGET PROPERTY INTERFACE_HYLO_MODULE_DEPENDS
 # immutable copy, but a locally built hc reads it from the source tree, where it
 # can change without the compiler binary changing; depending on the sources
 # keeps objects from going stale against a modified stdlib either way.
-if(NOT DEFINED _Hylo_STDLIB_SOURCES)
-  file(GLOB_RECURSE _hylo_stdlib_sources "${Hylo_STDLIB_ROOT}/*.hylo")
-  get_filename_component(_hylo_stdlib_parent "${Hylo_STDLIB_ROOT}" DIRECTORY)
-  if(EXISTS "${_hylo_stdlib_parent}/Generated.hylo")
-    list(APPEND _hylo_stdlib_sources "${_hylo_stdlib_parent}/Generated.hylo")
-  endif()
-  set(_Hylo_STDLIB_SOURCES "${_hylo_stdlib_sources}" CACHE INTERNAL "Hylo stdlib sources")
-endif()
+# Reglobbed on every configure so a replaced toolchain cannot leave modules
+# depending on the old one's files (behaviour.toolchain-swap); CACHE INTERNAL,
+# always overwritten, only makes the list visible in every directory.  The
+# root is the whole bundle (Sources/ and Generated.hylo), so one recursive
+# glob covers everything hc reads.
+file(GLOB_RECURSE _hylo_stdlib_sources "${Hylo_STDLIB_ROOT}/*.hylo")
+set(_Hylo_STDLIB_SOURCES "${_hylo_stdlib_sources}" CACHE INTERNAL "Hylo stdlib sources")
 
 # Evaluates to "/<config>" under multi-config generators and "" otherwise, so
 # per-target outputs do not collide across configurations.

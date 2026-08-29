@@ -10,11 +10,19 @@
 find_program(HYLO_TEST_NINJA ninja)
 find_program(HYLO_TEST_MAKE NAMES gmake make)
 
-# The fixtures assume a single-config layout; under Ninja Multi-Config run them
-# with plain Ninja (the multi-config generator has its own dedicated test).
+# The fixtures assume a single-config command-line generator; under a
+# multi-config one (Ninja Multi-Config, Visual Studio, Xcode) run them with
+# plain Ninja or Makefiles instead -- those generators have dedicated tests.
 set(HYLO_TEST_GENERATOR "${CMAKE_GENERATOR}")
-if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
-  set(HYLO_TEST_GENERATOR "Ninja")
+set(HYLO_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
+  if(HYLO_TEST_NINJA)
+    set(HYLO_TEST_GENERATOR "Ninja")
+    set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_NINJA}")
+  elseif(HYLO_TEST_MAKE)
+    set(HYLO_TEST_GENERATOR "Unix Makefiles")
+    set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_MAKE}")
+  endif()
 endif()
 
 function(add_behaviour_test name)
@@ -25,7 +33,7 @@ function(add_behaviour_test name)
       "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/${name}"
       "-DHylo_COMPILER=${Hylo_COMPILER}"
       "-DGENERATOR=${HYLO_TEST_GENERATOR}"
-      "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+      "-DMAKE_PROGRAM=${HYLO_TEST_MAKE_PROGRAM}"
       "-DC_COMPILER=${CMAKE_C_COMPILER}"
       "-DNINJA=${HYLO_TEST_NINJA}"
       "-DMAKE=${HYLO_TEST_MAKE}"
@@ -35,14 +43,17 @@ function(add_behaviour_test name)
 endfunction()
 
 # The incremental-build tests depend on Ninja's restat and output semantics.
-if(CMAKE_GENERATOR MATCHES "Ninja")
+if(HYLO_TEST_GENERATOR STREQUAL "Ninja")
   add_behaviour_test(incremental-interface-hash)
   add_behaviour_test(regenerate-deleted-archive)
   add_behaviour_test(mixed-c-partial-rebuild)
   add_behaviour_test(late-target-sources)
+  add_behaviour_test(flag-change-rebuild)
 endif()
 add_behaviour_test(import-visibility)
+add_behaviour_test(toolchain-swap)
 add_behaviour_test(per-config-flags)
+add_behaviour_test(transitive-options)
 add_behaviour_test(project-manifest)
 add_behaviour_test(install-export)
 if(NOT WIN32)
@@ -53,4 +64,17 @@ if(HYLO_TEST_NINJA)
 endif()
 if(HYLO_TEST_MAKE AND NOT WIN32)
   add_behaviour_test(generator-unix-makefiles)
+endif()
+
+# The IDE generators, where CMake can produce them (their fixtures build both
+# configurations and MSBuild/xcodebuild are slow: a longer timeout).
+execute_process(COMMAND "${CMAKE_COMMAND}" -E capabilities
+  OUTPUT_VARIABLE _hylo_cmake_capabilities ERROR_QUIET)
+if(WIN32 AND _hylo_cmake_capabilities MATCHES "Visual Studio 17 2022")
+  add_behaviour_test(generator-visual-studio)
+  set_tests_properties(behaviour.generator-visual-studio PROPERTIES TIMEOUT 600)
+endif()
+if(APPLE AND _hylo_cmake_capabilities MATCHES "Xcode")
+  add_behaviour_test(generator-xcode)
+  set_tests_properties(behaviour.generator-xcode PROPERTIES TIMEOUT 600)
 endif()

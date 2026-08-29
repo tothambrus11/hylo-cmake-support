@@ -17,7 +17,7 @@ to this file for the design rationale.
 Usage::
 
   list(APPEND CMAKE_MODULE_PATH "<this-directory>")
-  find_package(Hylo 0.0.6 REQUIRED)
+  find_package(Hylo 0.0.8 REQUIRED)
 
   hylo_add_library(Support SOURCES Support.hylo Extra.hylo)
   hylo_add_executable(app SOURCES main.hylo)
@@ -37,8 +37,9 @@ Result variables::
                         ``development`` builds of the compiler).
   Hylo_VERSION_STRING   Raw output of ``hc --version``.
   Hylo_COMPILER         Path to hc.  (cache; may be preset)
-  Hylo_STDLIB_ROOT      Root of the standard library sources.  (cache)
-  Hylo_STDLIB_SHIMS     The standard library's C shim, ``shims.c``.  (cache)
+  Hylo_STDLIB_ROOT      Root of the standard library sources, requeried from
+                        hc on every configure.
+  Hylo_STDLIB_SHIMS     The standard library's C shim, ``shims.c``.
 
 Imported / provided targets::
 
@@ -50,8 +51,8 @@ Imported / provided targets::
 Configuration variables (all cache entries, advanced)::
 
   Hylo_COMPILER         Override the compiler.  Also honoured as hints:
-                        ``CMAKE_Hylo_COMPILER`` (compatibility), ``$ENV{HC}``,
-                        ``Hylo_ROOT`` / ``$ENV{HYLO_ROOT}``, then ``PATH``.
+                        ``$ENV{HC}``, ``Hylo_ROOT`` / ``$ENV{HYLO_ROOT}``,
+                        then ``PATH``.
   Hylo_FLAGS            Flags for every hc compile (string, like CMAKE_C_FLAGS).
   Hylo_FLAGS_<CONFIG>   Per-configuration flags; defaults: Debug "",
                         Release/RelWithDebInfo/MinSizeRel "-O".
@@ -69,10 +70,7 @@ Requires CMake 3.30 (custom transitive target properties).
 #]=======================================================================]
 
 if(CMAKE_VERSION VERSION_LESS 3.30)
-  message(FATAL_ERROR
-    "FindHylo requires CMake 3.30 or newer (custom transitive target properties are "
-    "used to propagate module imports through target_link_libraries). "
-    "Running CMake ${CMAKE_VERSION}.")
+  message(FATAL_ERROR "FindHylo requires CMake 3.30 or newer. Running CMake ${CMAKE_VERSION}.")
 endif()
 
 cmake_policy(PUSH)
@@ -84,13 +82,19 @@ include(FindPackageHandleStandardArgs)
 # 1. Locate the compiler.
 # ---------------------------------------------------------------------------
 
-# Compatibility with the earlier out-of-tree language module, whose users set
-# CMAKE_Hylo_COMPILER (also the name the CMakePresets in this repo used).
-if(NOT Hylo_COMPILER AND CMAKE_Hylo_COMPILER)
-  set(Hylo_COMPILER "${CMAKE_Hylo_COMPILER}" CACHE FILEPATH "Hylo compiler (hc)")
-endif()
 if(NOT Hylo_COMPILER AND DEFINED ENV{HC} AND NOT "$ENV{HC}" STREQUAL "")
   set(Hylo_COMPILER "$ENV{HC}" CACHE FILEPATH "Hylo compiler (hc)")
+endif()
+
+# A cached compiler that has since been moved, rebuilt elsewhere or deleted
+# would be used forever and fail deep inside the build; forget it and search
+# again, so a build directory survives its toolchain being replaced.
+if(Hylo_COMPILER AND NOT EXISTS "${Hylo_COMPILER}")
+  if(NOT Hylo_FIND_QUIETLY)
+    message(STATUS "Hylo: the compiler this build was configured with is gone "
+      "(${Hylo_COMPILER}); searching for another one")
+  endif()
+  unset(Hylo_COMPILER CACHE)
 endif()
 
 find_program(Hylo_COMPILER
@@ -115,7 +119,7 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
   if(NOT _hylo_version_result EQUAL 0)
     set(Hylo_VERSION_STRING "")
   endif()
-  # "0.0.6" for releases, "development" for local builds of hylo-new.
+  # "0.0.8" for releases, "development" for local builds of hylo-new.
   if(Hylo_VERSION_STRING MATCHES "^v?([0-9]+(\\.[0-9]+)*)")
     set(Hylo_VERSION "${CMAKE_MATCH_1}")
   else()
@@ -124,18 +128,23 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
 
   # The standard library's location is baked into the compiler at build time
   # (a resource bundle for distributed builds, a source path for local ones), so
-  # the compiler is the only thing that can report it.
-  if(NOT Hylo_STDLIB_ROOT)
-    execute_process(
-      COMMAND "${Hylo_COMPILER}" --print-stdlib-root
-      OUTPUT_VARIABLE _hylo_stdlib_root
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_VARIABLE _hylo_stdlib_root_error
-      RESULT_VARIABLE _hylo_stdlib_root_result)
-    if(_hylo_stdlib_root_result EQUAL 0 AND IS_DIRECTORY "${_hylo_stdlib_root}")
-      set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}"
-        CACHE PATH "Root directory of the Hylo standard library's sources")
-    elseif(NOT Hylo_FIND_QUIETLY)
+  # the compiler is the only thing that can report it.  Requeried on every
+  # configure, like --version above: the answer belongs to the compiler that
+  # gave it, and a cached answer goes stale when the toolchain is replaced
+  # (behaviour.toolchain-swap).  CACHE INTERNAL, always overwritten, is used
+  # only to make the result visible in every directory.
+  execute_process(
+    COMMAND "${Hylo_COMPILER}" --print-stdlib-root
+    OUTPUT_VARIABLE _hylo_stdlib_root
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_VARIABLE _hylo_stdlib_root_error
+    RESULT_VARIABLE _hylo_stdlib_root_result)
+  if(_hylo_stdlib_root_result EQUAL 0 AND IS_DIRECTORY "${_hylo_stdlib_root}")
+    set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}"
+      CACHE INTERNAL "Root directory of the Hylo standard library's sources")
+  else()
+    set(Hylo_STDLIB_ROOT "" CACHE INTERNAL "")
+    if(NOT Hylo_FIND_QUIETLY)
       message(STATUS "Hylo: '${Hylo_COMPILER} --print-stdlib-root' failed: ${_hylo_stdlib_root_error}")
     endif()
   endif()
@@ -144,11 +153,22 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
   # declares (c_malloc_indirect, c_free_indirect).  `hc --emit binary` compiles
   # and links it automatically; anyone linking Hylo objects themselves -- i.e.
   # any build system -- has to supply it.  We compile it once (Hylo::Runtime).
-  if(Hylo_STDLIB_ROOT AND NOT Hylo_STDLIB_SHIMS)
-    set(Hylo_STDLIB_SHIMS "${Hylo_STDLIB_ROOT}/shims.c"
-      CACHE FILEPATH "The Hylo standard library's C shim source")
+  # The root is the stdlib bundle (hc >= 0.0.8, hylo-new#523): sources and
+  # shims.c under Sources/, Generated.hylo at the root.  Older compilers
+  # reported the Sources directory instead and are not supported.
+  if(Hylo_STDLIB_ROOT AND EXISTS "${Hylo_STDLIB_ROOT}/Sources/shims.c")
+    set(Hylo_STDLIB_SHIMS "${Hylo_STDLIB_ROOT}/Sources/shims.c"
+      CACHE INTERNAL "The Hylo standard library's C shim source")
+  else()
+    # Leaving it empty makes the check below report an unusable compiler,
+    # rather than letting the runtime target fail on a missing source file.
+    set(Hylo_STDLIB_SHIMS "" CACHE INTERNAL "The Hylo standard library's C shim source")
+    if(Hylo_STDLIB_ROOT AND NOT Hylo_FIND_QUIETLY)
+      message(STATUS "Hylo: no Sources/shims.c under the standard library "
+        "${Hylo_COMPILER} reports (${Hylo_STDLIB_ROOT}); hc 0.0.8 or newer is "
+        "required (older compilers lay out the standard library differently)")
+    endif()
   endif()
-  mark_as_advanced(Hylo_STDLIB_ROOT Hylo_STDLIB_SHIMS)
 
   # -------------------------------------------------------------------------
   # 3. Configuration knobs.
@@ -272,12 +292,10 @@ if(Hylo_FOUND)
     # allocates would not pull shims.obj out of the archive, link no CRT at all,
     # and fail with "unresolved external symbol mainCRTStartup".  Force the shim
     # in so its CRT directive always applies (matches CMAKE_MSVC_RUNTIME_LIBRARY).
+    # (Unprefixed: hc targets only 64-bit Windows, where C symbols carry no
+    # leading underscore.)
     if(MSVC)
-      if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-        target_link_options(hylo-runtime INTERFACE "LINKER:/INCLUDE:_c_malloc_indirect")
-      else()
-        target_link_options(hylo-runtime INTERFACE "LINKER:/INCLUDE:c_malloc_indirect")
-      endif()
+      target_link_options(hylo-runtime INTERFACE "LINKER:/INCLUDE:c_malloc_indirect")
     endif()
     add_library(Hylo::Runtime ALIAS hylo-runtime)
   endif()
