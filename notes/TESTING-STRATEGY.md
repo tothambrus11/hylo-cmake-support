@@ -3,16 +3,15 @@
 What it takes to trust `FindHylo.cmake`/`HyloTargets.cmake` as *the* way to build
 Hylo with CMake: which properties must hold, how each is tested, what the CI
 matrix should look like, and which experiments are still needed to find the
-integration's real limits. Current state (2026-08-29, phase 1 of section 10
-implemented; phases 2–3 on 2026-08-29 as well): 17 behaviour tests + the
-randomized incremental fuzzer + exit-status tests; 17 PR CI jobs — hc v0.0.8
-default, every config tested on both CMake 3.30.0 and latest (a matrix
-axis), gating Visual Studio 2022/2026
-jobs (Xcode: unsupported, curated diagnostic) — plus a Nightly workflow
-(toolchain variants, macOS x64, Windows arm64, CMake latestrc, latest-hc
-canary, aarch64+qemu cross job, fuzzer). The `probe_hash_precise` capability
-probe drives the incremental assertions and reports its verdict in their
-output.
+integration's real limits. Current state (2026-08-30): 17 behaviour tests +
+the randomized incremental fuzzer + exit-status tests; 24 PR CI jobs — hc
+v0.0.8, core configs on both CMake 3.30.0 and latest (a matrix axis),
+toolchain/arch variants (clang, clang-cl, NMake, macOS x64, Windows arm64)
+on latest, gating Visual Studio 2022/2026 jobs (Xcode: unsupported, curated
+diagnostic), the aarch64+qemu cross job, and the fuzzer. Nightly is two
+drift canaries: latest hc release vs pinned CMake, latest CMake vs pinned hc
+(§8). The `probe_hash_precise` capability probe drives the incremental
+assertions and reports its verdict in their output.
 Remaining hand experiments: MinGW, case-collision (§7).
 
 ## 1. The invariants
@@ -41,12 +40,13 @@ must therefore (a) test soundness independently of the hash's precision, and
 The full cross product (5 OS/arch × 4 CMake versions × 7 generators × 4 C
 toolchains × configs × cross-targets) is thousands of cells. Tier it:
 
-- **Tier 1 — every PR** (~12 jobs, < 15 min): one job per *risk*, not per
-  combination. Each generator appears once, each OS at least once, the CMake
-  floor and latest each once.
-- **Tier 2 — nightly/weekly** (`workflow_dispatch` + `schedule`): the fuller
-  spread, the incremental fuzzer (§3.4), CMake `dev` nightly, hc-HEAD canary
-  (§8), cross-compile + qemu jobs.
+- **Tier 1 — every PR**: one job per *risk*, not per combination. The repo
+  changes rarely and each change must be right, so this tier carries the
+  whole spread: every generator, every OS/arch and toolchain variant, the
+  CMake floor and latest, the cross + qemu job, and the fuzzer (§3.4).
+- **Tier 2 — nightly** (`schedule` + `workflow_dispatch`): drift canaries
+  only — the outside world moving with no PR to catch it. Latest hc release
+  (CMake pinned) and latest CMake (hc pinned), §8.
 - **Tier 3 — one-off experiments**: run by hand to answer "does X work at all",
   then either promoted into tier 1/2 or written down as a limitation in
   `cmake/README.md` (§7).
@@ -57,7 +57,7 @@ toolchains × configs × cross-targets) is thousands of cells. Tier it:
 |---|---|---|
 | **3.30.0 exactly** and **latest stable** | the two ends of the supported range, as a full matrix axis: **every PR config runs on both** (`cmake-version` × `config` in ci.yml; the one excluded cell is VS 2026 × 3.30, whose generator CMake 3.30 predates). Custom transitive properties were brand new in 3.30 — the most likely place for behavior differences. | 1 (every job) |
 | one middle version (3.31 or 4.0) | catches "worked at both ends, broke in the middle" (the 3.x→4.0 policy break) | 2 |
-| CMake `latestrc` | advisory only, in Nightly (get-cmake ships no dev-nightly builds; RCs are the earliest warning available) | 2 |
+| latest, daily | the latest-cmake nightly canary: pinned hc against the newest CMake, so a new release is caught without a PR | 2 |
 | **3.28 (negative)** | `find_package(Hylo)` must die with the curated "requires CMake 3.30" message, not an obscure `define_property` error. Verified by hand (2026-08-29); not in CI — installing a second, older CMake per run is not worth the complexity. | manual |
 
 Also once per release cycle: configure with `-Wdev --warn-uninitialized` and
@@ -73,12 +73,12 @@ matrix is bounded by GitHub runners, not by hc.
 | cell | C toolchain | status |
 |---|---|---|
 | Linux x64, arm64 | gcc (default) | in CI |
-| Linux x64 + **clang** | clang | in Nightly |
+| Linux x64 + **clang** | clang | in CI |
 | macOS arm64 (macos-26) | AppleClang | in CI |
-| **macOS x64** | AppleClang | in Nightly (`macos-26-intel`) |
+| **macOS x64** | AppleClang | in CI (`macos-26-intel`) |
 | Windows x64 | MSVC | in CI |
-| **Windows arm64** | MSVC arm64 | in Nightly (`windows-11-arm`) — the only cell where the MSVC force-link fix runs on a non-x64 CRT |
-| Windows x64 + **clang-cl** | clang-cl | in Nightly — validates that the `/INCLUDE:c_malloc_indirect` force-link (fd49534) is not MSVC-linker-specific |
+| **Windows arm64** | MSVC arm64 | in CI (`windows-11-arm`) — the only cell where the MSVC force-link fix runs on a non-x64 CRT |
+| Windows x64 + **clang-cl** | clang-cl | in CI — validates that the `/INCLUDE:c_malloc_indirect` force-link (fd49534) is not MSVC-linker-specific |
 | Windows + MinGW | gcc/COFF | tier 3 experiment: hc emits COFF via LLVM, so MinGW ld *should* link it; nobody has tried. Outcome → README either way. |
 
 ### 2.3 Generators
@@ -94,7 +94,7 @@ supported OS. Nothing in the integration is generator-specific except restat
 | Unix Makefiles | dedicated test (Linux, macOS) | keep (tier 1) | no restat → over-rebuild, accepted |
 | **Visual Studio** | **supported** — dedicated test (probes the installed VS — `cmake -E capabilities` lists supported names, not instances) + gating CI jobs for **VS 2026** (windows-latest) and **VS 2022** (windows-2022 image), promoted 2026-08-29 |  | multi-output custom commands become MSBuild CustomBuild steps — supported, but: no restat; `--verbose` output format differs, so the `hc_command` grep in `per-config-flags` needs an msbuild-aware matcher (or that test stays Ninja-only and VS gets its own per-config assert via `-- /v:d` or checking the generated `.vcxproj`); per-project parallelism only |
 | **Xcode** | **verdict reached (2026-08-29): unsupported** | negative test asserts the curated diagnostic | the experiment never got to the external-object question: Xcode has no per-config sources, so the per-configuration object path (`$<CONFIG>`) dies at generate time with a literal `NOCONFIG`. `hylo_target_module` now fails at configure with a curated message; README documents it. |
-| NMake Makefiles | in Nightly | — | slow, single-config |
+| NMake Makefiles | in CI | — | slow, single-config |
 | MinGW Makefiles | untested | tier 3, with the MinGW toolchain experiment | — |
 | VS + `-T ClangCL`, Watcom, Borland, Green Hills | — | out of scope; say so in README | — |
 
@@ -212,9 +212,9 @@ archive, mixed C/Hylo partial rebuild, `target_sources` late addition. Add:
 | transitive-only interface change (`Right` in the diamond, not imported by `App` but in its link closure) | App recompiles | the documented conservative closure rule; also the first place to *relax* once the hash is precise, so pin it with a test either way |
 | edit during build / two edits within one mtime tick (`file(WRITE)` twice, same size) | eventual convergence: at most one extra rebuild, never a stale binary | restat + write-if-different + coarse mtimes is exactly the combination that produces "sometimes stale" bugs |
 
-### 3.4 Randomized incremental fuzzing (tier 2)
+### 3.4 Randomized incremental fuzzing (own CI job)
 
-Hand-picked mutations won't find the weird interleavings. Nightly job:
+Hand-picked mutations won't find the weird interleavings. Per-PR job:
 
 1. Generate a random module DAG (8–15 modules, random PRIVATE/PUBLIC edges,
    each module's functions summing constants from its imports so the exit
@@ -237,14 +237,11 @@ hits it. Run the fuzzer's DAG builds with high `-j` for free coverage.
 
 ## 4. Flags (I3)
 
-`per-config-flags` covers: Debug vs Release defaults, `Hylo_FLAGS`,
-per-target PRIVATE options. Missing:
+Covered: Debug vs Release defaults, `Hylo_FLAGS`, per-target PRIVATE options
+(`per-config-flags`); PUBLIC/PRIVATE/INTERFACE propagation scoping via
+`TRANSITIVE_COMPILE_PROPERTIES HYLO_COMPILE_OPTIONS` (`transitive-options`);
+flag changes triggering rebuilds (`flag-change-rebuild`, §3.3). Missing:
 
-- **Propagation scoping**: `hylo_target_compile_options(dep PUBLIC …)` must
-  appear on dependents' hc lines (via `TRANSITIVE_COMPILE_PROPERTIES
-  HYLO_COMPILE_OPTIONS`); `PRIVATE` must not; `INTERFACE` only on dependents.
-  This transitive-options plumbing is currently *untested* — it is the same
-  mechanism as imports, but a distinct property list.
 - **Generator expressions** in options (`$<$<CONFIG:Release>:-O>` written by
   the user) — documented CMake practice, easy to break in the genex-wrapping
   the helper already does.
@@ -258,59 +255,41 @@ per-target PRIVATE options. Missing:
   diagnostic visible in the output (not swallowed by the custom command), and
   the configure-time works-check still passes (flags shouldn't apply there —
   or should they? decide, then pin with a test).
-- **Flag change triggers rebuild** — listed in §3.3; it's both a flags test
-  and an incremental test.
 
 ## 5. Cross-compilation
 
-The ev3 subproject is the living proof (armel via C4EV3 toolchain file), but
-nothing in CI exercises `Hylo_TARGET_TRIPLE` — and cross-compilation is no
-longer a fringe feature: it is v0.0.7's headline ("Enable cross-compilation"),
-so the integration's `--target` plumbing should be tested at the same level as
-native builds, against hc ≥ 0.0.7. Plan, in order of increasing faith:
+The `--target` plumbing is tested at two tiers. Tier 1, every PR job:
+`behaviour.cross-target` (toolchain file sets
+`CMAKE_C_COMPILER_TARGET=aarch64-linux-gnu`) asserts `--target` on every hc
+line, that `-DHylo_TARGET_TRIPLE=` overrides it, and the object's ELF
+`e_machine` — pure CMake, no cross C compiler needed
+(`CMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`). The `cross-aarch64` CI
+job: gcc-aarch64 + qemu-user, exit-status tests run under the
+emulator — `RunExpectExit.cmake` and `assert_exit` honour the target's
+`CROSSCOMPILING_EMULATOR`, so every exit-status test is cross-capable.
 
-1. **Command-line fidelity (tier 1, cheap)**: fixture with a toolchain file
-   setting `CMAKE_C_COMPILER_TARGET=aarch64-linux-gnu`; assert `--target
-   aarch64-linux-gnu` appears on every hc line and that an explicit
-   `-DHylo_TARGET_TRIPLE=` overrides it. No cross C compiler needed if
-   configure-time link checks are skipped (`CMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`).
-2. **Artifact inspection (tier 1)**: with `gcc-aarch64-linux-gnu` installed on
-   the Linux runner, build the diamond; assert the linked executable's
-   architecture via `file`/`readelf -h` (AArch64), and that the *stdlib shim*
-   and Hylo objects are all target-arch (a host-arch object sneaking in is the
-   classic cross bug).
-3. **Execution under emulation (tier 2)**: `qemu-user` (`CMAKE_CROSSCOMPILING_EMULATOR
-   "qemu-aarch64;-L;/usr/aarch64-linux-gnu"`), run the exit-status tests.
-   **Harness fix required first**: `RunExpectExit.cmake` invokes `${EXE}`
-   directly and bypasses the emulator — teach it (and `assert_exit` in
-   `tests/Harness.cmake`) to honour `CMAKE_CROSSCOMPILING_EMULATOR`. Worth
-   doing regardless; it's what makes every existing exit-status test
-   cross-capable for free.
-4. **Second target (tier 2)**: armv5/armel with the ev3-style triple — the
-   32-bit soft-float case is where `--cpu`/ABI defaults differ most from
-   native. macOS arm64 → x86_64 (`CMAKE_OSX_ARCHITECTURES=x86_64`, executed
-   under Rosetta on the same runner) covers the Apple side; with the
-   `macos-x64` hc asset and an Intel runner (§2.2) the reverse direction is
-   also natively verifiable.
+Still open (each answer goes in README):
 
-Cross-specific behaviour to pin down with tests (these are open questions —
-each answer goes in README):
-
-- Does FindHylo's configure-time "compile a trivial module" works-check use the
-  target triple? If it compiles host-only, a broken cross setup passes
-  configure and fails at build — decide which behavior is wanted and assert it.
+- **Second target**: armv5/armel — 32-bit soft-float is where
+  `--cpu`/ABI defaults differ most from native. macOS arm64 → x86_64
+  (`CMAKE_OSX_ARCHITECTURES=x86_64`, run under Rosetta) covers the Apple
+  side; with the `macos-x64` hc asset and an Intel runner (§2.2) the reverse
+  direction is natively verifiable too.
+- The configure-time works-check passes `--target` when the triple is set,
+  but no test asserts it, and its memoization key omits the triple: changing
+  `Hylo_TARGET_TRIPLE` on reconfigure skips the probe and defers failure to
+  build time. Fix the key, pin both with a test.
 - Stdlib cache keying: `Hylo_MODULE_CACHE_DIR` defaults into the build tree —
   verify a host build and a cross build in *different* trees never share, and
   that two configs / two triples in one multi-config tree don't collide.
   (The related native case — a build tree surviving its *toolchain* being
   moved or replaced — is covered by `behaviour.toolchain-swap`.)
-- `Hylo_TARGET_TRIPLE` is still marked experimental in FindHylo's docs, but
-  the compiler side graduated in 0.0.7 — these tests are what justifies
-  dropping the "experimental" label.
+- `Hylo_TARGET_TRIPLE` is still marked experimental in FindHylo's docs; drop
+  the label once the items above are settled.
 
 ## 6. find_package / packaging / versioning (I5)
 
-- `find_package(Hylo 0.0.6 REQUIRED)` against hc 0.0.6 — covered implicitly
+- `find_package(Hylo 0.0.8 REQUIRED)` against hc 0.0.8 — covered implicitly
   everywhere; against a *newer* hc → accepted (minimum semantics, §2.4). Add a
   negative: request a version newer than the installed hc → clean configure
   failure naming both versions.
@@ -350,15 +329,18 @@ mode needs guarding):
 - `ccache`/`sccache` masquerading as the C compiler launcher — must be inert
   for hc edges, still apply to shim/C edges.
 
-## 8. Compiler-drift canary (tier 2)
+## 8. Drift canaries (tier 2)
 
 The 0.0.5→0.0.6 CLI break (`-I` removed) is the shape of the biggest external
-risk. Nightly job building against hc from hylo-new HEAD (setup-hylo
-`version: nightly`, or built from source, `continue-on-error: true`): the full
-behaviour suite plus the §3.2 capability probe. The day the probe reports
-`HASH_PRECISE=ON`, or a flag disappears, the canary says so *before* a release
-does. The probe result should be printed in every CI run's "Toolchain info"
-step so the transition is visible in logs.
+risk, and the repo changes too rarely for PR CI to see the world move. The
+Nightly workflow is therefore two single-variable canaries, each pinning the
+other end: the latest hc release against a pinned CMake, and the latest CMake
+against the pinned hc, both running the full suite including the §3.2
+capability probe. The day the probe reports `HASH_PRECISE=ON`, or a flag
+disappears, a canary says so before a repo change trips over it — and the
+failed job names the moving part. An hc-HEAD canary (setup-hylo
+`version: nightly`, or built from source) would warn earlier but needs
+nightly hc artifacts, which do not exist yet.
 
 ## 9. Mechanics
 
@@ -366,8 +348,8 @@ step so the transition is visible in logs.
   platform CMake runs on. Grow `Harness.cmake` with: `assert_noop_rebuild()`,
   emulator-aware `assert_exit`, the msbuild-aware `hc_command` matcher, the
   `HASH_PRECISE` probe, and a `fixture_mutate`/oracle-compare pair for §3.4.
-- Labels as tiers: `behaviour` (tier 1), `behaviour-slow`, `fuzz` (tier 2);
-  CI selects with `ctest -L`.
+- Labels: `behaviour` for the default suite, `fuzz` for the fuzzer's own job
+  (registered behind `-DHYLO_FUZZ=ON`); CI selects with `ctest -L`.
 - On failure, `actions/upload-artifact` the test's `WORK_DIR` (both trees for
   the fuzzer, plus the seed).
 - The CI matrix stays an explicit `include:` list — every job is one named
@@ -403,6 +385,10 @@ step so the transition is visible in logs.
    (advisory; get-cmake has no dev-nightly builds), and a latest-hc-release
    canary (an hc-HEAD canary needs nightly hc artifacts, which don't exist
    yet). `behaviour.development-version` pins the §6 policy with a stub hc.
-4. **Experiments**: paths-with-spaces is a permanent behaviour test
+4. **DONE (2026-08-30)**: the nightly variant/cross/fuzz jobs moved into PR
+   CI (the repo changes rarely, so every change carries the full spread);
+   Nightly reduced to the two §8 drift canaries — latest hc release vs
+   pinned CMake, latest CMake vs pinned hc.
+5. **Experiments**: paths-with-spaces is a permanent behaviour test
    (`behaviour.paths-with-spaces`); MinGW and case-collision remain hand
    experiments — verdicts into README's Limitations.

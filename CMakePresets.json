@@ -35,6 +35,14 @@
             "binaryDir": "${sourceDir}/build-make"
         },
         {
+            "name": "nmake",
+            "inherits": "default",
+            "displayName": "Hylo (NMake Makefiles)",
+            "generator": "NMake Makefiles",
+            "binaryDir": "${sourceDir}/build-nmake",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
             "name": "vs2026",
             "inherits": "default",
             "displayName": "Hylo (Visual Studio 2026)",
@@ -57,6 +65,7 @@
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug" },
         { "name": "multi-release", "configurePreset": "multi", "configuration": "Release" },
         { "name": "make", "configurePreset": "make" },
+        { "name": "nmake", "configurePreset": "nmake" },
         { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug" },
         { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug" }
     ],
@@ -65,6 +74,7 @@
         { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug", "output": { "outputOnFailure": true } },
         { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } },
+        { "name": "nmake", "configurePreset": "nmake", "output": { "outputOnFailure": true } },
         { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug", "output": { "outputOnFailure": true } },
         { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } }
     ]

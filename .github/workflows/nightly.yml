@@ -1,141 +1,69 @@
 name: Nightly
 
-# Tier 2 of notes/TESTING-STRATEGY.md: the wider spread that would be waste on
-# every PR -- toolchain variants, forward-looking versions, cross-compilation
-# under emulation, and the randomized incremental fuzzer.
+# Drift canaries.  The repo changes rarely, so breakage caused by the outside
+# world moving -- a new hc release, a new CMake -- has to be caught by the
+# schedule, not by PR CI (which only runs when we change something).  Each job
+# moves exactly one variable and pins the other.  Everything else runs in
+# ci.yml on every change.
 on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
 env:
+  # The pinned ends of each canary.
   HYLO_VERSION: 0.0.8
+  CMAKE_PINNED: 3.30.0
 
 jobs:
-  variants:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.advisory || false }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux x64 (clang)
-            os: ubuntu-24.04
-            cc: clang
-          - name: Windows x64 (clang-cl)
-            os: windows-latest
-            cc: clang-cl
-          - name: Windows x64 (NMake Makefiles)
-            os: windows-latest
-            generator: NMake Makefiles
-          - name: macOS x64 (Ninja)
-            os: macos-26-intel
-          - name: Windows arm64 (Ninja)
-            os: windows-11-arm
-          # Forward-looking CMake: release candidates, advisory only.
-          - name: Linux x64 (CMake latestrc)
-            os: ubuntu-24.04
-            cmake-version: latestrc
-            advisory: true
-          # Compiler-drift canary: whatever hc release is newest right now,
-          # which may be ahead of the pinned default.  (An hc-HEAD canary
-          # needs nightly hc artifacts, which do not exist yet.)
-          - name: Linux x64 (latest hc release)
-            os: ubuntu-24.04
-            hylo-latest: true
-            advisory: true
+  latest-hc:
+    name: Latest hc release (CMake pinned)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up MSVC environment (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-
       - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
         with:
-          cmakeVersion: ${{ matrix.cmake-version || 'latest' }}
-
+          cmakeVersion: ${{ env.CMAKE_PINNED }}
       - name: Resolve latest hc release
         id: latest-hylo
-        if: matrix.hylo-latest
         env:
           GH_TOKEN: ${{ github.token }}
         run: echo "tag=$(gh api repos/hylo-lang/hylo-new/releases/latest -q .tag_name)" >> "$GITHUB_OUTPUT"
-
-      - name: Install Hylo
-        uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
+      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
-          version: ${{ steps.latest-hylo.outputs.tag || format('v{0}', env.HYLO_VERSION) }}
-
+          version: ${{ steps.latest-hylo.outputs.tag }}
       - name: Toolchain info
-        shell: bash
         run: |
           hc --version
           cmake --version | head -1
-
       - name: Configure
-        shell: bash
-        env:
-          CC: ${{ matrix.cc }}
-        run: cmake -S . -B build -G "${{ matrix.generator || 'Ninja' }}"
-
+        run: cmake --preset default
       - name: Build
-        run: cmake --build build
-
+        run: cmake --build --preset default
       - name: Test
-        run: ctest --test-dir build -j 2 --output-on-failure
+        run: ctest --preset default -j 2
 
-  cross-aarch64:
-    name: Linux x64 -> aarch64 (qemu)
+  latest-cmake:
+    name: Latest CMake (hc pinned)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # "latest" comes from the pinned get-cmake release's catalog, so it
+      # advances when Dependabot bumps the action; this job then keeps
+      # verifying that version daily even while no PRs happen.
       - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: latest
       - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: v${{ env.HYLO_VERSION }}
-      - name: Install cross toolchain and qemu
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-aarch64-linux-gnu qemu-user
-      - name: Configure
-        run: >
-          cmake -S . -B build -G Ninja
-          -DCMAKE_TOOLCHAIN_FILE=tests/toolchains/aarch64-linux-gnu.cmake
-      - name: Build
-        run: cmake --build build
-      - name: Linked executables are aarch64
+      - name: Toolchain info
         run: |
-          file build/examples/diamond/diamond
-          file build/examples/diamond/diamond | grep -q aarch64
-      # The behaviour tests configure their fixtures for the host; only the
-      # exit-status tests exercise the cross-built programs (under qemu, via
-      # each target's CROSSCOMPILING_EMULATOR).
-      - name: Test (exit-status tests, under qemu)
-        run: ctest --test-dir build -LE behaviour --output-on-failure
-
-  fuzz:
-    name: Randomized incremental fuzz
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
-      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
-        with:
-          version: v${{ env.HYLO_VERSION }}
+          hc --version
+          cmake --version | head -1
       - name: Configure
-        env:
-          FUZZ_ITERATIONS: 60
-        run: cmake -S . -B build -G Ninja -DHYLO_FUZZ=ON
+        run: cmake --preset default
       - name: Build
-        run: cmake --build build
-      - name: Fuzz
-        run: ctest --test-dir build -L fuzz --output-on-failure
-      - name: Upload fuzz work directory
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: fuzz-workdir
-          path: |
-            build/tests/fuzz-incremental/
-            !build/tests/fuzz-incremental/**/hylo-module-cache
-          if-no-files-found: ignore
+        run: cmake --build --preset default
+      - name: Test
+        run: ctest --preset default -j 2
