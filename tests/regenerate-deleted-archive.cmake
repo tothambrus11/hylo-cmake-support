@@ -11,7 +11,7 @@ set(_dir "${WORK_DIR}/build/diamond/CMakeFiles/Base.hylo.dir")
 file(REMOVE "${_dir}/Base.hylomodule")
 fixture_build(out)
 assert_build_ok(out)
-assert_contains("${out}" "Compiling Hylo module Base (" "deleted archive must trigger recompile")
+assert_compiled("${out}" Base "deleted archive must trigger recompile")
 assert_exists("${_dir}/Base.hylomodule" "archive not regenerated")
 
 file(REMOVE "${_dir}/Base.iface")

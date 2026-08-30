@@ -132,21 +132,33 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
   # configure, like --version above: the answer belongs to the compiler that
   # gave it, and a cached answer goes stale when the toolchain is replaced
   # (behaviour.toolchain-swap).  CACHE INTERNAL, always overwritten, is used
-  # only to make the result visible in every directory.
-  execute_process(
-    COMMAND "${Hylo_COMPILER}" --print-stdlib-root
-    OUTPUT_VARIABLE _hylo_stdlib_root
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_VARIABLE _hylo_stdlib_root_error
-    RESULT_VARIABLE _hylo_stdlib_root_result)
-  if(_hylo_stdlib_root_result EQUAL 0 AND IS_DIRECTORY "${_hylo_stdlib_root}")
-    set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}"
-      CACHE INTERNAL "Root directory of the Hylo standard library's sources")
-  else()
-    set(Hylo_STDLIB_ROOT "" CACHE INTERNAL "")
+  # only to make the result visible in every directory.  An explicit
+  # -DHylo_STDLIB_ROOT= wins over the query -- the escape hatch for a compiler
+  # that misreports its own layout; _Hylo_STDLIB_ROOT_QUERIED records the
+  # compiler's last answer so an override is recognizable as such.
+  if(DEFINED Hylo_STDLIB_ROOT
+      AND NOT "${Hylo_STDLIB_ROOT}" STREQUAL "${_Hylo_STDLIB_ROOT_QUERIED}")
     if(NOT Hylo_FIND_QUIETLY)
-      message(STATUS "Hylo: '${Hylo_COMPILER} --print-stdlib-root' failed: ${_hylo_stdlib_root_error}")
+      message(STATUS "Hylo: standard library root overridden: ${Hylo_STDLIB_ROOT}")
     endif()
+  else()
+    execute_process(
+      COMMAND "${Hylo_COMPILER}" --print-stdlib-root
+      OUTPUT_VARIABLE _hylo_stdlib_root
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_VARIABLE _hylo_stdlib_root_error
+      RESULT_VARIABLE _hylo_stdlib_root_result)
+    if(_hylo_stdlib_root_result EQUAL 0 AND IS_DIRECTORY "${_hylo_stdlib_root}")
+      set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}"
+        CACHE INTERNAL "Root directory of the Hylo standard library's sources")
+    else()
+      set(Hylo_STDLIB_ROOT "" CACHE INTERNAL "")
+      if(NOT Hylo_FIND_QUIETLY)
+        message(STATUS "Hylo: '${Hylo_COMPILER} --print-stdlib-root' failed: ${_hylo_stdlib_root_error}")
+      endif()
+    endif()
+    set(_Hylo_STDLIB_ROOT_QUERIED "${Hylo_STDLIB_ROOT}"
+      CACHE INTERNAL "The stdlib root as last reported by hc")
   endif()
 
   # shims.c implements the @extern_c_indirect functions the standard library
@@ -205,8 +217,9 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
   # -------------------------------------------------------------------------
   # 4. Check that the compiler works (and warm the module cache).
   # -------------------------------------------------------------------------
-  # Keyed on the compiler path + version so a changed toolchain is re-checked.
-  set(_hylo_works_key "${Hylo_COMPILER}|${Hylo_VERSION_STRING}|${Hylo_MODULE_CACHE_DIR}")
+  # Keyed on the compiler path + version + target triple so a changed
+  # toolchain or triple is re-checked (the probe passes --target below).
+  set(_hylo_works_key "${Hylo_COMPILER}|${Hylo_VERSION_STRING}|${Hylo_MODULE_CACHE_DIR}|${Hylo_TARGET_TRIPLE}")
   if(NOT Hylo_COMPILER_WORKS_KEY STREQUAL _hylo_works_key)
     set(_hylo_test_dir "${CMAKE_BINARY_DIR}/CMakeFiles/HyloCompilerTest")
     file(MAKE_DIRECTORY "${_hylo_test_dir}")

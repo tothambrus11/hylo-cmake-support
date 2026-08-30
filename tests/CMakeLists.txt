@@ -22,6 +22,13 @@ if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
   elseif(HYLO_TEST_MAKE)
     set(HYLO_TEST_GENERATOR "Unix Makefiles")
     set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_MAKE}")
+  else()
+    # Registering the fixtures against a multi-config generator would fail
+    # them all on wrong output paths; skip them loudly instead.
+    set(HYLO_TEST_GENERATOR "")
+    message(STATUS "${CMAKE_GENERATOR} is multi-config and neither ninja nor "
+      "make is on PATH; behaviour tests needing a single-config generator "
+      "are not registered")
   endif()
 endif()
 
@@ -51,20 +58,25 @@ if(HYLO_TEST_GENERATOR STREQUAL "Ninja")
   add_behaviour_test(flag-change-rebuild)
   add_behaviour_test(cross-target)
 endif()
-add_behaviour_test(import-visibility)
-add_behaviour_test(toolchain-swap)
-add_behaviour_test(per-config-flags)
-add_behaviour_test(transitive-options)
-add_behaviour_test(paths-with-spaces)
-add_behaviour_test(project-manifest)
-add_behaviour_test(install-export)
-if(NOT WIN32)
-  add_behaviour_test(package-config)   # uses a symlink to stand in for an installed toolchain
-  add_behaviour_test(development-version)   # the stub compiler is a shell script
+if(HYLO_TEST_GENERATOR)
+  add_behaviour_test(import-visibility)
+  add_behaviour_test(toolchain-swap)
+  set_tests_properties(behaviour.toolchain-swap PROPERTIES
+    SKIP_REGULAR_EXPRESSION "stdlib outside itself.*skipping")
+  add_behaviour_test(per-config-flags)
+  add_behaviour_test(transitive-options)
+  add_behaviour_test(paths-with-spaces)
+  add_behaviour_test(project-manifest)
+  add_behaviour_test(install-export)
+  if(NOT WIN32)
+    add_behaviour_test(package-config)   # uses a symlink to stand in for an installed toolchain
+    add_behaviour_test(development-version)   # the stub compiler is a shell script
+  endif()
 endif()
 
-# Randomized incremental fuzzing: nightly, not per-PR (opt in, own label, no
-# parallel sibling -- it measures rebuild minimality).  FUZZ_SEED/-ITERATIONS
+# Randomized incremental fuzzing: its own CI job, not part of the default
+# suite (opt in, own label, no parallel sibling -- it measures rebuild
+# minimality).  FUZZ_SEED/-ITERATIONS
 # come from the environment at configure time; the seed is printed for replay.
 option(HYLO_FUZZ "Register the randomized incremental fuzz test" OFF)
 if(HYLO_FUZZ AND HYLO_TEST_GENERATOR STREQUAL "Ninja")
@@ -109,7 +121,20 @@ if(WIN32)
 endif()
 
 # Xcode is not supported (no per-config sources); the test asserts the
-# curated configure-time diagnostic.
+# curated configure-time diagnostic.  Probe that the generator itself works
+# first: on a machine with only the Command Line Tools, `-G Xcode` dies with
+# CMake's own error before the curated diagnostic can print.
 if(APPLE)
-  add_behaviour_test(generator-xcode)
+  set(_hylo_xcode_probe "${CMAKE_CURRENT_BINARY_DIR}/xcode-probe")
+  file(REMOVE_RECURSE "${_hylo_xcode_probe}")
+  file(WRITE "${_hylo_xcode_probe}/CMakeLists.txt"
+    "cmake_minimum_required(VERSION 3.30)\nproject(probe NONE)\n")
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -S "${_hylo_xcode_probe}" -B "${_hylo_xcode_probe}/build" -G Xcode
+    RESULT_VARIABLE _hylo_xcode_result OUTPUT_QUIET ERROR_QUIET)
+  if(_hylo_xcode_result EQUAL 0)
+    add_behaviour_test(generator-xcode)
+  else()
+    message(STATUS "Xcode not available; behaviour.generator-xcode not registered")
+  endif()
 endif()

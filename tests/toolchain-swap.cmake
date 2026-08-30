@@ -22,9 +22,17 @@ endforeach()
 
 execute_process(COMMAND "${_tc_a}/${_hc_name}" --print-stdlib-root
   OUTPUT_VARIABLE _stdlib OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _r)
-if(NOT _r EQUAL 0 OR NOT _stdlib MATCHES "^${_tc_a}/")
+if(NOT _r EQUAL 0)
+  message(FATAL_ERROR "the stand-in toolchain's hc failed to run (${_r})")
+endif()
+# Compare paths, not strings: hc may print native (backslash) separators, and
+# a regex would trip on metacharacters in the build path.
+file(TO_CMAKE_PATH "${_stdlib}" _stdlib)
+cmake_path(IS_PREFIX _tc_a "${_stdlib}" NORMALIZE _stdlib_inside)
+if(NOT _stdlib_inside)
   # An FHS-installed toolchain (stdlib not next to hc) cannot be cloned this
-  # way; the test cannot exercise the move, which is fine to skip.
+  # way; the test cannot exercise the move.  Reported as a skip, not a pass
+  # (SKIP_REGULAR_EXPRESSION in CMakeLists.txt).
   message(STATUS "stand-in toolchain reports its stdlib outside itself (${_stdlib}); skipping")
   return()
 endif()

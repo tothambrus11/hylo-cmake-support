@@ -3,6 +3,12 @@
 # Expects: SOURCE_DIR (repo root), WORK_DIR (scratch dir for this test),
 # Hylo_COMPILER, GENERATOR, MAKE_PROGRAM, C_COMPILER, NINJA, MAKE.
 
+# The compile edge's COMMENT wording, defined once; HyloTargets.cmake and the
+# whole suite's recompiled/not-recompiled assertions must agree on it.
+# assert_noop_rebuild() checks the wording actually appeared in an earlier
+# build of the test, so drift fails loudly instead of matching nothing.
+set(HYLO_COMPILE_MESSAGE "Compiling Hylo module")
+
 # Creates a fresh fixture project in ${WORK_DIR}/src made of copies of the
 # named example directories, with a top-level CMakeLists that finds Hylo.
 function(fixture_create)
@@ -67,6 +73,10 @@ function(fixture_build out)
     RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
   set(${out} "${_o}${_e}" PARENT_SCOPE)
   set(${out}_RESULT "${_r}" PARENT_SCOPE)
+  string(FIND "${_o}${_e}" "${HYLO_COMPILE_MESSAGE}" _saw)
+  if(NOT _saw EQUAL -1)
+    set_property(GLOBAL PROPERTY HYLO_COMPILE_MESSAGE_SEEN TRUE)
+  endif()
 endfunction()
 
 # The parameter must not be named like the caller's variable (conventionally
@@ -114,7 +124,18 @@ endfunction()
 
 # The compiled-module message for <module>, as printed by the custom command.
 function(compile_message out module)
-  set(${out} "Compiling Hylo module ${module} (" PARENT_SCOPE)
+  set(${out} "${HYLO_COMPILE_MESSAGE} ${module} (" PARENT_SCOPE)
+endfunction()
+
+# Assert that captured build output does (not) show <module> being recompiled.
+function(assert_compiled text module why)
+  compile_message(_m "${module}")
+  assert_contains("${text}" "${_m}" "${why}")
+endfunction()
+
+function(assert_not_compiled text module why)
+  compile_message(_m "${module}")
+  assert_not_contains("${text}" "${_m}" "${why}")
 endfunction()
 
 # Builds again and asserts the build is a no-op: nothing compiled, nothing
@@ -122,6 +143,15 @@ endfunction()
 # their own inputs.  Accepts fixture_build's BUILD_DIR/CONFIG.
 function(assert_noop_rebuild why)
   cmake_parse_arguments(PARSE_ARGV 1 arg "" "BUILD_DIR;CONFIG" "")
+  # Self-check: the message must have appeared in an earlier, real build of
+  # this test; otherwise the negative assertions below match nothing and pass
+  # vacuously (e.g. after HyloTargets.cmake rewords its COMMENT).
+  get_property(_seen GLOBAL PROPERTY HYLO_COMPILE_MESSAGE_SEEN)
+  if(NOT _seen)
+    message(FATAL_ERROR "${why}: '${HYLO_COMPILE_MESSAGE}' never appeared in "
+      "any build output; the harness wording has drifted from "
+      "HyloTargets.cmake's COMMENT")
+  endif()
   set(_fb)
   if(arg_BUILD_DIR)
     list(APPEND _fb BUILD_DIR "${arg_BUILD_DIR}")
@@ -131,7 +161,7 @@ function(assert_noop_rebuild why)
   endif()
   fixture_build(_noop ${_fb})
   assert_build_ok(_noop)
-  assert_not_contains("${_noop}" "Compiling Hylo module" "${why}: second build must be a no-op")
+  assert_not_contains("${_noop}" "${HYLO_COMPILE_MESSAGE}" "${why}: second build must be a no-op")
   assert_not_contains("${_noop}" "Linking C" "${why}: second build must not relink")
 endfunction()
 

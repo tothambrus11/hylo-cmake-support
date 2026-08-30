@@ -323,6 +323,8 @@ function(hylo_target_module target)
     DEPENDS "${_sources}" "${_module_depends}" "${Hylo_COMPILER}" ${_Hylo_STDLIB_SOURCES}
     COMMAND_EXPAND_LISTS
     VERBATIM
+    # The behaviour tests key their recompile assertions on this wording
+    # (HYLO_COMPILE_MESSAGE in tests/Harness.cmake); change both together.
     COMMENT "Compiling Hylo module ${_module} (${target})")
 
   # The object is an EXTERNAL_OBJECT source (by extension); CMake links it and

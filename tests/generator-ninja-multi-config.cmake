@@ -16,5 +16,5 @@ assert_exists("${WORK_DIR}/build/diamond/CMakeFiles/Base.hylo.dir/Release/Base.h
 file(TOUCH_NOCREATE "${WORK_DIR}/src/diamond/Base.hylo")
 fixture_build(out CONFIG Release)
 assert_build_ok(out)
-assert_contains("${out}" "Compiling Hylo module Base (" "touched Base must recompile")
-assert_not_contains("${out}" "Compiling Hylo module Left (" "unchanged interface must not recompile Left")
+assert_compiled("${out}" Base "touched Base must recompile")
+assert_not_compiled("${out}" Left "unchanged interface must not recompile Left")
