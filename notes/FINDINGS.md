@@ -5,7 +5,9 @@
 > integration was replaced by a `find_package(Hylo)` + custom-command design when
 > moving to hc 0.0.6; see `../cmake/README.md` for the current design and
 > `UPSTREAM-PLAN.md` for what changed and why. The analysis below is kept as history;
-> its findings about hc and about upstream CMake still hold.
+> the upstream-CMake findings still hold. The hc gaps it originally recorded —
+> no multi-module CLI, no `--version` — are fixed in current hc and no longer
+> documented here.
 
 ## Verdict
 
@@ -171,94 +173,13 @@ The lesson for the CLI: `withCSources:` is hc solving a problem that build syste
 default for `hc file.hylo` on the command line, but the `--emit object` + external-link path is what integrations want,
 and it should stay first-class.
 
-### Locating the stdlib shim (fixed by `--print-stdlib-root`)
+### Locating the stdlib shim
 
 `shims.c` implements the `@extern_c_indirect` functions the stdlib declares (`c_malloc_indirect`, `c_free_indirect`).
 Any Hylo program that allocates needs it linked in. `hc --emit binary` appends it automatically
 (`Driver.generateExecutable`), but when you link yourself — which every build-system integration does — you must supply
-it, and there was **no way to ask hc where it is**. The path is baked in at build time via
-`#filePath` in `StandardLibrary/StandardLibrary.swift` (or a resource bundle under
-`USE_BUNDLED_STANDARD_LIBRARY`), and `--stdlib` was removed from this tree.
-
-The first version of this integration guessed with `find_file(shims.c)` relative to the
-`hc` binary. That was pure guesswork — it silently found nothing until the hint path was corrected, and it could never
-work for a bundled `hc`.
-
-**Resolved: `hc --print-stdlib-root` is implemented** (change 3 below).
-`CMakeDetermineHyloCompiler.cmake` now asks the compiler:
-
-```cmake
-execute_process(COMMAND "${CMAKE_Hylo_COMPILER}" --print-stdlib-root
-                OUTPUT_VARIABLE _hylo_stdlib_root OUTPUT_STRIP_TRAILING_WHITESPACE ...)
-```
-
-giving `CMAKE_Hylo_STDLIB_ROOT` and `CMAKE_Hylo_STDLIB_SHIMS` as proper cache variables. The compiler is the only thing
-that knows this path, so it is the only correct source for it — and this works for local and bundled layouts alike,
-without the build system knowing which is in play.
-
-## Multi-module: what blocks it today
-
-Multi-module support is **not reachable from the CLI**, for three reasons. All are in
-`Sources/Driver/Driver.swift` / `Sources/hc/CommandLine.swift`.
-
-### 1. The product's module archive is computed and then thrown away
-
-`CommandLine.swift:201`:
-
-```swift
-// Write the module to the cache for future runs.
-let a = try driver.program.archive(module: module)
-note("module archive size: \(a.count)")
-```
-
-The comment says it writes to the cache. It does not — it computes the archive, logs its size, and drops it.
-**Verified**: after compiling a module with `--module-cache`, the cache contains only `Hylo.hylomodule` (the stdlib,
-persisted by `load()`); the product's own `.hylomodule` is never written.
-
-So a module can never be consumed by a later `hc` invocation. This is the hard blocker.
-
-### 2. `-L` does nothing for finding modules
-
-`archive(of:)` (`Driver.swift:346`) only ever looks in `moduleCachePath`:
-
-```swift
-public func archive(of module: Module.Name) -> Data? {
-  if let prefix = moduleCachePath {
-    let path = prefix.appending(path: module + ".hylomodule")
-    return try? Data(contentsOf: path)
-  } else { return nil }
-}
-```
-
-`librarySearchPaths` is collected from `-L`, deduplicated, and then **ignored** by the only function that resolves
-module archives. `configureSearchPaths()` appends the module cache to it, which makes the dead code look live.
-
-### 3. No way to declare a dependency on another module
-
-`driver.program[module].addDependency(...)` is only ever called with
-`Module.standardLibraryName`, hardcoded. There is no CLI surface for "Main depends on Support".
-
-### Suggested shape
-
-To make CMake multi-module work, the smallest coherent set:
-
-- **Persist the archive.** Either honour the existing comment (write
-  `<ModuleName>.hylomodule` into `--module-cache`), or better, add an explicit
-  `--emit module -o <file>` so the build system names the artifact. Build systems need declared outputs at known paths.
-- **Make `archive(of:)` search `librarySearchPaths`**, so `-L` means what it says.
-- **Add `--import <Name>`** (repeatable) to load a module archive and register it as a dependency.
-
-That maps onto CMake cleanly: each Hylo module becomes one target emitting `.o` +
-`.hylomodule`; `target_link_libraries` drives `-L`/`--import`; CMake's existing dependency graph orders the builds. The
-per-module object still links normally.
-
-Worth confirming first: whether the language can currently *express* a cross-module reference. Dependencies appear to
-work by making a module's public declarations visible (user code uses `Int32` with no import), so `--import` would
-likely fall out naturally — but that assumption should be checked before building CLI surface on it.
-
-Incremental compilation (explicitly non-priority) rides on the same archive machinery:
-`load()` already compares a source fingerprint against the archive header. That path exists and is used for the stdlib;
-it just isn't reachable for user modules.
+it, and its path is baked into the compiler at build time. This is what motivated `--print-stdlib-root` (change 3
+above): the compiler is the only thing that knows the path, and asking it works for local and bundled layouts alike.
 
 ## Other rough edges found
 
@@ -285,12 +206,6 @@ cmake_initialize_per_config_variable(CMAKE_Hylo_FLAGS "Flags used by the Hylo co
 Without it there is **no warning** — the flags simply never appear on the command line. I hit this exactly: `-O` was
 silently absent from Release builds until I added the call.
 `CMakeAddNewLanguage.txt` does not mention it.
-
-### `hc` has no `--version`
-
-`CMakeDetermineHyloCompiler.cmake` cannot report a real
-`CMAKE_Hylo_COMPILER_VERSION` (it reports `unknown`). Every other CMake language surfaces a version, and users
-reasonably branch on it. A `--version` flag would be cheap.
 
 ### The installed `hc` does not match `hylo-new` HEAD
 
