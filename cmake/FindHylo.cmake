@@ -25,10 +25,13 @@ Usage::
 
 Commands (see ``HyloTargets.cmake`` for the full documentation)::
 
-  hylo_add_library(<target> [STATIC|SHARED] [MODULE_NAME <name>] SOURCES <file>...)
-  hylo_add_executable(<target> [MODULE_NAME <name>] [NO_RUNTIME] [SOURCES] <file>...)
+  hylo_add_library(<target> [STATIC|SHARED|MODULE] [EXCLUDE_FROM_ALL]
+                   [MODULE_NAME <name>] [NO_RUNTIME] [SOURCES] <source>...)
+  hylo_add_executable(<target> [EXCLUDE_FROM_ALL] [MODULE_NAME <name>]
+                      [NO_RUNTIME] [SOURCES] <source>...)
   hylo_target_module(<existing-target> [MODULE_NAME <name>] [NO_RUNTIME])
   hylo_target_compile_options(<target> <PRIVATE|PUBLIC|INTERFACE> <option>...)
+  hylo_install_module(<target> [DESTINATION <dir>] [COMPONENT <component>])
 
 Result variables::
 
@@ -37,8 +40,8 @@ Result variables::
                         ``development`` builds of the compiler).
   Hylo_VERSION_STRING   Raw output of ``hc --version``.
   Hylo_COMPILER         Path to hc.  (cache; may be preset)
-  Hylo_STDLIB_ROOT      Root of the standard library sources, requeried from
-                        hc on every configure.
+  Hylo_STDLIB_ROOT      Root of the standard library sources; requeried from
+                        hc on every configure unless overridden (see below).
   Hylo_STDLIB_SHIMS     The standard library's C shim, ``shims.c``.
 
 Imported / provided targets::
@@ -56,6 +59,8 @@ Configuration variables (all cache entries, advanced)::
   Hylo_FLAGS            Flags for every hc compile (string, like CMAKE_C_FLAGS).
   Hylo_FLAGS_<CONFIG>   Per-configuration flags; defaults: Debug "",
                         Release/RelWithDebInfo/MinSizeRel "-O".
+  Hylo_STDLIB_ROOT      Override the standard library root instead of asking
+                        hc for it (empty: query on every configure).
   Hylo_MODULE_CACHE_DIR Where hc caches the compiled standard library.  Defaults
                         to a directory inside the build tree so builds are
                         hermetic and do not share state with other toolchains.
@@ -82,19 +87,20 @@ include(FindPackageHandleStandardArgs)
 # 1. Locate the compiler.
 # ---------------------------------------------------------------------------
 
-if(NOT Hylo_COMPILER AND DEFINED ENV{HC} AND NOT "$ENV{HC}" STREQUAL "")
-  set(Hylo_COMPILER "$ENV{HC}" CACHE FILEPATH "Hylo compiler (hc)")
-endif()
-
 # A cached compiler that has since been moved, rebuilt elsewhere or deleted
 # would be used forever and fail deep inside the build; forget it and search
-# again, so a build directory survives its toolchain being replaced.
+# again (starting with the hints below), so a build directory survives its
+# toolchain being replaced.
 if(Hylo_COMPILER AND NOT EXISTS "${Hylo_COMPILER}")
   if(NOT Hylo_FIND_QUIETLY)
     message(STATUS "Hylo: the compiler this build was configured with is gone "
       "(${Hylo_COMPILER}); searching for another one")
   endif()
   unset(Hylo_COMPILER CACHE)
+endif()
+
+if(NOT Hylo_COMPILER AND DEFINED ENV{HC} AND NOT "$ENV{HC}" STREQUAL "")
+  set(Hylo_COMPILER "$ENV{HC}" CACHE FILEPATH "Hylo compiler (hc)")
 endif()
 
 find_program(Hylo_COMPILER
@@ -128,16 +134,17 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
 
   # The standard library's location is baked into the compiler at build time
   # (a resource bundle for distributed builds, a source path for local ones), so
-  # the compiler is the only thing that can report it.  Requeried on every
-  # configure, like --version above: the answer belongs to the compiler that
-  # gave it, and a cached answer goes stale when the toolchain is replaced
-  # (behaviour.toolchain-swap).  CACHE INTERNAL, always overwritten, is used
-  # only to make the result visible in every directory.  An explicit
-  # -DHylo_STDLIB_ROOT= wins over the query -- the escape hatch for a compiler
-  # that misreports its own layout; _Hylo_STDLIB_ROOT_QUERIED records the
-  # compiler's last answer so an override is recognizable as such.
-  if(DEFINED Hylo_STDLIB_ROOT
-      AND NOT "${Hylo_STDLIB_ROOT}" STREQUAL "${_Hylo_STDLIB_ROOT_QUERIED}")
+  # the compiler is the only thing that can report it.  The cache entry is an
+  # ordinary knob, empty by default like Hylo_MODULE_CACHE_DIR and
+  # Hylo_TARGET_TRIPLE: set it to override the query -- the escape hatch for a
+  # compiler that misreports its own layout.  When empty, hc is requeried on
+  # every configure, like --version above, into a normal variable shadowing the
+  # cache entry: the answer belongs to the compiler that gave it, and caching
+  # it would go stale when the toolchain is replaced (behaviour.toolchain-swap).
+  set(Hylo_STDLIB_ROOT "" CACHE PATH
+    "Root of the Hylo standard library's sources (empty: ask hc)")
+  mark_as_advanced(Hylo_STDLIB_ROOT)
+  if(Hylo_STDLIB_ROOT)
     if(NOT Hylo_FIND_QUIETLY)
       message(STATUS "Hylo: standard library root overridden: ${Hylo_STDLIB_ROOT}")
     endif()
@@ -149,16 +156,10 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
       ERROR_VARIABLE _hylo_stdlib_root_error
       RESULT_VARIABLE _hylo_stdlib_root_result)
     if(_hylo_stdlib_root_result EQUAL 0 AND IS_DIRECTORY "${_hylo_stdlib_root}")
-      set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}"
-        CACHE INTERNAL "Root directory of the Hylo standard library's sources")
-    else()
-      set(Hylo_STDLIB_ROOT "" CACHE INTERNAL "")
-      if(NOT Hylo_FIND_QUIETLY)
-        message(STATUS "Hylo: '${Hylo_COMPILER} --print-stdlib-root' failed: ${_hylo_stdlib_root_error}")
-      endif()
+      set(Hylo_STDLIB_ROOT "${_hylo_stdlib_root}")
+    elseif(NOT Hylo_FIND_QUIETLY)
+      message(STATUS "Hylo: '${Hylo_COMPILER} --print-stdlib-root' failed: ${_hylo_stdlib_root_error}")
     endif()
-    set(_Hylo_STDLIB_ROOT_QUERIED "${Hylo_STDLIB_ROOT}"
-      CACHE INTERNAL "The stdlib root as last reported by hc")
   endif()
 
   # shims.c implements the @extern_c_indirect functions the standard library
@@ -217,8 +218,9 @@ if(Hylo_COMPILER AND EXISTS "${Hylo_COMPILER}")
   # -------------------------------------------------------------------------
   # 4. Check that the compiler works (and warm the module cache).
   # -------------------------------------------------------------------------
-  # Keyed on the compiler path + version + target triple so a changed
-  # toolchain or triple is re-checked (the probe passes --target below).
+  # Keyed on the compiler path, version, module cache and target triple so a
+  # changed toolchain, cache or triple is re-checked (the probe passes
+  # --target below).
   set(_hylo_works_key "${Hylo_COMPILER}|${Hylo_VERSION_STRING}|${Hylo_MODULE_CACHE_DIR}|${Hylo_TARGET_TRIPLE}")
   if(NOT Hylo_COMPILER_WORKS_KEY STREQUAL _hylo_works_key)
     set(_hylo_test_dir "${CMAKE_BINARY_DIR}/CMakeFiles/HyloCompilerTest")

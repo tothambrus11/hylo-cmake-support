@@ -11,14 +11,12 @@ Two files give a CMake project Hylo support, using only documented, stable CMake
 | `RunExpectExit.cmake`                         | ctest helper used by this repo's examples: assert an exact exit status                                                                                                               |
 
 Requires **hc ≥ 0.0.8** (the first release with the current stdlib bundle
-layout, hylo-new#523; the CLI surface used here — `--module-search-path`,
-`--import`, `--emit-module-to`, `--emit-module-interface-hash-to`,
-`--version` — dates from 0.0.6, but the older layouts are not supported) and
-**CMake ≥ 3.30**, tested through CMake 4.3. CI: Linux x64/arm64, macOS
-arm64/x64, Windows x64/arm64 — core configurations on both CMake 3.30.0 and
-the latest CMake, toolchain variants (clang, clang-cl, NMake), Visual Studio
-2026 and 2022 jobs (the Xcode generator is unsupported — see Limitations),
-an aarch64+qemu cross job, and the incremental fuzzer.
+layout, hylo-new#523; older layouts are not supported) and **CMake ≥ 3.30**.
+CI: Linux x64/arm64, macOS arm64/x64, Windows x64/arm64 — core configurations
+on both CMake 3.30.0 and the latest CMake, toolchain variants (clang,
+clang-cl, NMake), Visual Studio 2026 and 2022 jobs (the Xcode generator is
+unsupported — see Limitations), an aarch64+qemu cross job, and the
+incremental fuzzer.
 
 ## Usage
 
@@ -127,8 +125,8 @@ toolchain (protobuf, Qt's moc, Vala, Corrosion for Rust) does, and it is the mor
 
 ```
 [1/9] Compiling Hylo module Base (Base)        # Base recompiles; hc leaves Base.iface untouched
-[2/4] Linking C static library libBase.a       # 4 steps total: Left, Right, App were pruned
-[3/4] Linking C executable diamond
+[2/4] Linking C static library libBase.a       # ninja's total shrank from 9: restat pruned
+[3/4] Linking C executable diamond             # the recompiles of Left, Right and App
 ```
 
 Then it changes `Base`'s interface (adds a public function) and checks that

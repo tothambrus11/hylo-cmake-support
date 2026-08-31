@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
 
 env:
-  # Default hc, unprefixed like matrix.cmake-version; the release tag's `v` is
-  # prepended where the version is used.  A job overrides it with
-  # matrix.hylo-version (also unprefixed).
+  # The hc release every job installs (the supported floor); the release
+  # tag's `v` is prepended where the version is used.
   HYLO_VERSION: 0.0.8
 
 jobs:
@@ -21,11 +20,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every configuration runs against both ends of the supported CMake
-        # range: the floor (3.30.0, first with custom transitive properties)
-        # and the latest release.  `config` is the second axis; the include
-        # entries below attach each config's settings to both versions.
-        # (The hc floor, v0.0.8, is the matrix default already.)
+        # Every core configuration runs against both ends of the supported
+        # CMake range: the floor (3.30.0, first with custom transitive
+        # properties) and the latest release.  `config` is the second axis;
+        # the first group of include entries attaches each config's settings
+        # to both versions.  The toolchain/arch variants are risk coverage,
+        # not CMake-version coverage: their `config` is not on the axis, so
+        # each include is one standalone job, on the latest CMake.
         cmake-version: ["3.30.0", "latest"]
         config:
           - linux-ninja
@@ -37,27 +38,9 @@ jobs:
           - windows-ninja
           - windows-vs2026
           - windows-vs2022
-          - linux-clang
-          - macos-x64
-          - windows-clang-cl
-          - windows-nmake
-          - windows-arm64
         exclude:
           # CMake 3.30 predates the Visual Studio 2026 generator.
           - config: windows-vs2026
-            cmake-version: "3.30.0"
-          # The toolchain/arch variants are risk coverage, not CMake-version
-          # coverage: the core configs already span the version range, so
-          # each variant runs once, on the latest CMake.
-          - config: linux-clang
-            cmake-version: "3.30.0"
-          - config: macos-x64
-            cmake-version: "3.30.0"
-          - config: windows-clang-cl
-            cmake-version: "3.30.0"
-          - config: windows-nmake
-            cmake-version: "3.30.0"
-          - config: windows-arm64
             cmake-version: "3.30.0"
         include:
           - config: linux-ninja
@@ -107,32 +90,38 @@ jobs:
             preset: vs2022
             build-preset: vs2022-debug
             test-preset: vs2022-debug
-          # Toolchain and arch variants (moved from Nightly 2026-08-30: the
-          # repo changes rarely, so correctness coverage belongs on PRs).
+          # Toolchain and arch variants: standalone jobs, latest CMake only
+          # (moved from Nightly 2026-08-30: the repo changes rarely, so
+          # correctness coverage belongs on PRs).
           - config: linux-clang
+            cmake-version: "latest"
             name: Linux x64 (clang)
             os: ubuntu-24.04
             preset: default
             cc: clang
           - config: macos-x64
+            cmake-version: "latest"
             name: macOS x64 (Ninja, Debug)
             os: macos-26-intel
             preset: default
           # clang-cl validates that the /INCLUDE:c_malloc_indirect force-link
           # is not MSVC-linker-specific.
           - config: windows-clang-cl
+            cmake-version: "latest"
             name: Windows x64 (clang-cl)
             os: windows-latest
             preset: default
             cc: clang-cl
             msvc-arch: x64
           - config: windows-nmake
+            cmake-version: "latest"
             name: Windows x64 (NMake Makefiles)
             os: windows-latest
             preset: nmake
             msvc-arch: x64
           # The only cell where the MSVC force-link fix runs on a non-x64 CRT.
           - config: windows-arm64
+            cmake-version: "latest"
             name: Windows arm64 (Ninja, Debug)
             os: windows-11-arm
             preset: default
@@ -152,13 +141,12 @@ jobs:
       # bump of the action is also the CMake upgrade.
       - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
         with:
-          cmakeVersion: ${{ matrix.cmake-version || 'latest' }}
+          cmakeVersion: ${{ matrix.cmake-version }}
 
-      - name: Install Hylo ${{ matrix.hylo-version || env.HYLO_VERSION }}
-        id: hylo
+      - name: Install Hylo ${{ env.HYLO_VERSION }}
         uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
-          version: v${{ matrix.hylo-version || env.HYLO_VERSION }}
+          version: v${{ env.HYLO_VERSION }}
 
       - name: Toolchain info
         shell: bash

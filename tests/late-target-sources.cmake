@@ -7,6 +7,7 @@ fixture_configure()
 fixture_build(out)
 assert_build_ok(out)
 assert_exit("${WORK_DIR}/build/plain-targets/plain-app" 7)
+assert_noop_rebuild("initial build")
 
 # GreeterExtra.hylo was added after hylo_target_module(); it must be an input.
 file(WRITE "${WORK_DIR}/src/plain-targets/GreeterExtra.hylo" "public fun bonus() -> Int32 { 9 }\n")
@@ -14,3 +15,4 @@ fixture_build(out)
 assert_build_ok(out)
 assert_compiled("${out}" Greeter "late-added source must be a module input")
 assert_exit("${WORK_DIR}/build/plain-targets/plain-app" 9)
+assert_noop_rebuild("after late-source edit")

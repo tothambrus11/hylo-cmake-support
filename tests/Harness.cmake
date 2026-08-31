@@ -9,6 +9,15 @@
 # build of the test, so drift fails loudly instead of matching nothing.
 set(HYLO_COMPILE_MESSAGE "Compiling Hylo module")
 
+# The suffix of the module objects in the fixtures' host builds.  Mirrors
+# CMAKE_C_OUTPUT_EXTENSION (which names them in HyloTargets.cmake but is not
+# available in a -P script): ".obj" on Windows for every toolchain, ".o"
+# elsewhere.
+set(HYLO_OBJ_EXT ".o")
+if(WIN32)
+  set(HYLO_OBJ_EXT ".obj")
+endif()
+
 # Creates a fresh fixture project in ${WORK_DIR}/src made of copies of the
 # named example directories, with a top-level CMakeLists that finds Hylo.
 function(fixture_create)
@@ -195,9 +204,26 @@ function(probe_hash_precise out)
   endif()
 endfunction()
 
+# A stand-in toolchain at <dest>: hard links of every file in the directory
+# holding ${Hylo_COMPILER} (cheap -- the toolchain is big; COPY_ON_ERROR
+# crosses filesystems).  Unlike a symlink of hc alone, the clone's hc resolves
+# its own executable path -- where it finds its bundled stdlib -- inside
+# <dest>.  Used by behaviour.toolchain-swap and behaviour.package-config.
+function(toolchain_clone dest)
+  get_filename_component(_src "${Hylo_COMPILER}" DIRECTORY)
+  file(GLOB_RECURSE _files RELATIVE "${_src}" "${_src}/*")
+  foreach(_f IN LISTS _files)
+    get_filename_component(_d "${dest}/${_f}" DIRECTORY)
+    file(MAKE_DIRECTORY "${_d}")
+    file(CREATE_LINK "${_src}/${_f}" "${dest}/${_f}" COPY_ON_ERROR)
+  endforeach()
+endfunction()
+
 # Extracts the hc command line that compiled <module> from verbose build output.
 function(hc_command out module text)
-  string(REGEX MATCH "hc(\\.exe)? --module-name ${module} [^\n]*" _cmd "${text}")
+  # The optional quote: build tools print the compiler path quoted when it
+  # contains spaces.
+  string(REGEX MATCH "hc(\\.exe)?\"? --module-name ${module} [^\n]*" _cmd "${text}")
   if(NOT _cmd)
     message(FATAL_ERROR "no hc command for module ${module} in:\n${text}")
   endif()

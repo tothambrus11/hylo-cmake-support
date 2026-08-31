@@ -2,8 +2,8 @@
 # reaches every hc command line, Hylo_TARGET_TRIPLE beats the
 # CMAKE_C_COMPILER_TARGET default, and the object hc emits is really for the
 # target architecture (ELF e_machine, checked with pure CMake).  Execution
-# under qemu is the nightly cross job's business.  Ninja only (the build.ninja
-# grep and single-object build).
+# under qemu is the cross-aarch64 CI job's business.  Ninja only (the
+# build.ninja grep and single-object build).
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 fixture_create(diamond)
 
@@ -13,12 +13,11 @@ assert_contains("${_ninja}" "--target aarch64-unknown-linux-gnu"
   "the triple must reach the hc command lines")
 
 # Build just the Hylo object (the host C toolchain cannot link aarch64).
-set(_obj "diamond/CMakeFiles/Base.hylo.dir/Base.o")
-if(WIN32)   # CMAKE_C_OUTPUT_EXTENSION
-  set(_obj "diamond/CMakeFiles/Base.hylo.dir/Base.obj")
-endif()
+# MAKE_PROGRAM, not a PATH lookup: it is the ninja the fixture was configured
+# with, which an IDE may have supplied off PATH.
+set(_obj "diamond/CMakeFiles/Base.hylo.dir/Base${HYLO_OBJ_EXT}")
 execute_process(
-  COMMAND "${NINJA}" -C "${WORK_DIR}/build" "${_obj}"
+  COMMAND "${MAKE_PROGRAM}" -C "${WORK_DIR}/build" "${_obj}"
   RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
 if(NOT _r EQUAL 0)
   message(FATAL_ERROR "cross object build failed (${_r}):\n${_o}\n${_e}")

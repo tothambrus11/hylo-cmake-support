@@ -7,7 +7,7 @@
 #   (b) a second incremental build is a no-op.
 # Deterministic per seed; the seed is printed first so any failure is
 # reproducible with -DFUZZ_SEED=<n>.  Ninja only; registered behind
-# -DHYLO_FUZZ=ON (nightly).
+# -DHYLO_FUZZ=ON (its own CI job).
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 
 if(NOT FUZZ_SEED)
@@ -108,21 +108,15 @@ fixture_configure()
 fixture_build(out)
 assert_build_ok(out)
 
-# The oracle: a from-scratch build of the same sources in a second tree.
+# The oracle: a from-clean build of the same sources in a second tree,
+# configured once -- mutations rewrite source contents, never the CMakeLists,
+# so `--clean-first` per iteration is a from-scratch compile of the current
+# sources without paying a reconfigure (and the warm module cache) each time.
+fixture_configure(BUILD_DIR "${WORK_DIR}/oracle")
 function(oracle_exit out_var)
-  file(REMOVE_RECURSE "${WORK_DIR}/oracle")
-  execute_process(
-    COMMAND "${CMAKE_COMMAND}" -S "${WORK_DIR}/src" -B "${WORK_DIR}/oracle" -G "${GENERATOR}"
-      "-DHylo_COMPILER=${Hylo_COMPILER}" "-DCMAKE_C_COMPILER=${C_COMPILER}"
-      "-DCMAKE_MAKE_PROGRAM=${MAKE_PROGRAM}"
-    RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
-  if(NOT _r EQUAL 0)
-    message(FATAL_ERROR "seed ${FUZZ_SEED}: oracle configure failed:\n${_o}${_e}")
-  endif()
-  execute_process(COMMAND "${CMAKE_COMMAND}" --build "${WORK_DIR}/oracle"
-    RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
-  if(NOT _r EQUAL 0)
-    message(FATAL_ERROR "seed ${FUZZ_SEED}: oracle build failed:\n${_o}${_e}")
+  fixture_build(_oracle BUILD_DIR "${WORK_DIR}/oracle" ARGS --clean-first)
+  if(NOT _oracle_RESULT EQUAL 0)
+    message(FATAL_ERROR "seed ${FUZZ_SEED}: oracle build failed:\n${_oracle}")
   endif()
   execute_process(COMMAND "${WORK_DIR}/oracle/fuzz/app" RESULT_VARIABLE _r)
   set(${out_var} "${_r}" PARENT_SCOPE)

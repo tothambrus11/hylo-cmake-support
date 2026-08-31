@@ -10,26 +10,31 @@
 find_program(HYLO_TEST_NINJA ninja)
 find_program(HYLO_TEST_MAKE NAMES gmake make)
 
-# The fixtures assume a single-config command-line generator; under a
-# multi-config one (Ninja Multi-Config, Visual Studio, Xcode) run them with
-# plain Ninja or Makefiles instead -- those generators have dedicated tests.
-set(HYLO_TEST_GENERATOR "${CMAKE_GENERATOR}")
-set(HYLO_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
-if(NOT CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
-  if(HYLO_TEST_NINJA)
-    set(HYLO_TEST_GENERATOR "Ninja")
-    set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_NINJA}")
-  elseif(HYLO_TEST_MAKE)
-    set(HYLO_TEST_GENERATOR "Unix Makefiles")
-    set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_MAKE}")
-  else()
-    # Registering the fixtures against a multi-config generator would fail
-    # them all on wrong output paths; skip them loudly instead.
-    set(HYLO_TEST_GENERATOR "")
-    message(STATUS "${CMAKE_GENERATOR} is multi-config and neither ninja nor "
-      "make is on PATH; behaviour tests needing a single-config generator "
-      "are not registered")
-  endif()
+# The fixtures assume a single-config command-line generator; one of those
+# runs them with itself.  Under a multi-config generator (Ninja Multi-Config,
+# Visual Studio, Xcode -- each has a dedicated test) they run with plain Ninja
+# or, failing that, Makefiles.
+get_property(_hylo_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT _hylo_multi_config)
+  set(HYLO_TEST_GENERATOR "${CMAKE_GENERATOR}")
+  set(HYLO_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+elseif(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+  # The build's own ninja drives the single-config Ninja generator too --
+  # important when it is an IDE-bundled ninja that is not on PATH.
+  set(HYLO_TEST_GENERATOR "Ninja")
+  set(HYLO_TEST_MAKE_PROGRAM "${CMAKE_MAKE_PROGRAM}")
+elseif(HYLO_TEST_NINJA)
+  set(HYLO_TEST_GENERATOR "Ninja")
+  set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_NINJA}")
+elseif(HYLO_TEST_MAKE AND NOT WIN32)
+  set(HYLO_TEST_GENERATOR "Unix Makefiles")
+  set(HYLO_TEST_MAKE_PROGRAM "${HYLO_TEST_MAKE}")
+else()
+  # Registering the fixtures against a multi-config generator would fail
+  # them all on wrong output paths; skip them loudly instead.
+  set(HYLO_TEST_GENERATOR "")
+  message(STATUS "${CMAKE_GENERATOR} is multi-config and no single-config "
+    "build tool was found; behaviour tests needing one are not registered")
 endif()
 
 function(add_behaviour_test name)
@@ -68,8 +73,8 @@ if(HYLO_TEST_GENERATOR)
   add_behaviour_test(paths-with-spaces)
   add_behaviour_test(project-manifest)
   add_behaviour_test(install-export)
+  add_behaviour_test(package-config)
   if(NOT WIN32)
-    add_behaviour_test(package-config)   # uses a symlink to stand in for an installed toolchain
     add_behaviour_test(development-version)   # the stub compiler is a shell script
   endif()
 endif()
@@ -92,22 +97,44 @@ if(HYLO_TEST_MAKE AND NOT WIN32)
   add_behaviour_test(generator-unix-makefiles)
 endif()
 
-# Visual Studio, if one is installed.  `cmake -E capabilities` lists the
-# generator names CMake *supports*, not the VS instances present (bit us on
-# windows-latest, which now carries only VS 2026), so probe by configuring a
-# trivial project.  The fixture builds both configurations with MSBuild:
-# a longer timeout.
-if(WIN32)
-  set(_hylo_vs_generator "")
-  set(_hylo_vs_probe "${CMAKE_CURRENT_BINARY_DIR}/vs-probe")
-  foreach(_vs "Visual Studio 18 2026" "Visual Studio 17 2022")
-    file(REMOVE_RECURSE "${_hylo_vs_probe}")
-    file(WRITE "${_hylo_vs_probe}/CMakeLists.txt"
+# Whether `cmake -G <generator>` can configure a trivial project -- the only
+# way to detect a *usable* generator: `cmake -E capabilities` lists the names
+# CMake supports, not the toolchains present (bit us on windows-latest, which
+# now carries only VS 2026).  Memoized in the cache; the answer cannot change
+# within a build tree's life, like FindHylo's works-check.
+function(hylo_generator_works out generator)
+  string(MAKE_C_IDENTIFIER "_HYLO_GENERATOR_WORKS_${generator}" _key)
+  if(NOT DEFINED ${_key})
+    set(_probe "${CMAKE_CURRENT_BINARY_DIR}/generator-probe")
+    file(REMOVE_RECURSE "${_probe}")
+    file(WRITE "${_probe}/CMakeLists.txt"
       "cmake_minimum_required(VERSION 3.30)\nproject(probe NONE)\n")
     execute_process(
-      COMMAND "${CMAKE_COMMAND}" -S "${_hylo_vs_probe}" -B "${_hylo_vs_probe}/build" -G "${_vs}"
-      RESULT_VARIABLE _hylo_vs_result OUTPUT_QUIET ERROR_QUIET)
-    if(_hylo_vs_result EQUAL 0)
+      COMMAND "${CMAKE_COMMAND}" -S "${_probe}" -B "${_probe}/build" -G "${generator}"
+      RESULT_VARIABLE _r OUTPUT_QUIET ERROR_QUIET)
+    if(_r EQUAL 0)
+      set(${_key} TRUE CACHE INTERNAL "cmake -G ${generator} works")
+    else()
+      set(${_key} FALSE CACHE INTERNAL "cmake -G ${generator} works")
+    endif()
+  endif()
+  set(${out} ${${_key}} PARENT_SCOPE)
+endfunction()
+
+# Visual Studio, if one is installed: probe every VS generator this CMake
+# supports, newest first, and test against the newest usable one.  The
+# fixture builds both configurations with MSBuild: a longer timeout.
+if(WIN32)
+  set(_hylo_vs_generator "")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E capabilities
+    OUTPUT_VARIABLE _hylo_caps ERROR_QUIET)
+  string(REGEX MATCHALL "\"Visual Studio [0-9]+ [0-9]+\"" _hylo_vs_candidates "${_hylo_caps}")
+  list(REMOVE_DUPLICATES _hylo_vs_candidates)
+  list(SORT _hylo_vs_candidates COMPARE NATURAL ORDER DESCENDING)
+  foreach(_vs IN LISTS _hylo_vs_candidates)
+    string(REPLACE "\"" "" _vs "${_vs}")
+    hylo_generator_works(_hylo_vs_works "${_vs}")
+    if(_hylo_vs_works)
       set(_hylo_vs_generator "${_vs}")
       break()
     endif()
@@ -125,14 +152,8 @@ endif()
 # first: on a machine with only the Command Line Tools, `-G Xcode` dies with
 # CMake's own error before the curated diagnostic can print.
 if(APPLE)
-  set(_hylo_xcode_probe "${CMAKE_CURRENT_BINARY_DIR}/xcode-probe")
-  file(REMOVE_RECURSE "${_hylo_xcode_probe}")
-  file(WRITE "${_hylo_xcode_probe}/CMakeLists.txt"
-    "cmake_minimum_required(VERSION 3.30)\nproject(probe NONE)\n")
-  execute_process(
-    COMMAND "${CMAKE_COMMAND}" -S "${_hylo_xcode_probe}" -B "${_hylo_xcode_probe}/build" -G Xcode
-    RESULT_VARIABLE _hylo_xcode_result OUTPUT_QUIET ERROR_QUIET)
-  if(_hylo_xcode_result EQUAL 0)
+  hylo_generator_works(_hylo_xcode_works Xcode)
+  if(_hylo_xcode_works)
     add_behaviour_test(generator-xcode)
   else()
     message(STATUS "Xcode not available; behaviour.generator-xcode not registered")

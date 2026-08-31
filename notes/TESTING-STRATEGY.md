@@ -12,7 +12,7 @@ diagnostic), the aarch64+qemu cross job, and the fuzzer. Nightly is two
 drift canaries: latest hc release vs pinned CMake, latest CMake vs pinned hc
 (§8). The `probe_hash_precise` capability probe drives the incremental
 assertions and reports its verdict in their output.
-Remaining hand experiments: MinGW, case-collision (§7).
+Remaining hand experiments: MinGW (§2.2) and the §7 environment list.
 
 ## 1. The invariants
 
@@ -55,9 +55,8 @@ toolchains × configs × cross-targets) is thousands of cells. Tier it:
 
 | version | why | tier |
 |---|---|---|
-| **3.30.0 exactly** and **latest stable** | the two ends of the supported range, as a full matrix axis: **every PR config runs on both** (`cmake-version` × `config` in ci.yml; the one excluded cell is VS 2026 × 3.30, whose generator CMake 3.30 predates). Custom transitive properties were brand new in 3.30 — the most likely place for behavior differences. | 1 (every job) |
-| one middle version (3.31 or 4.0) | catches "worked at both ends, broke in the middle" (the 3.x→4.0 policy break) | 2 |
-| latest, daily | the latest-cmake nightly canary: pinned hc against the newest CMake, so a new release is caught without a PR | 2 |
+| **3.30.0 exactly** and **latest stable** | the two ends of the supported range, as a full matrix axis: **every core config runs on both** (`cmake-version` × `config` in ci.yml; the one excluded cell is VS 2026 × 3.30, whose generator CMake 3.30 predates). The toolchain/arch variants are standalone cells on latest only — they are risk coverage, not version coverage. Custom transitive properties were brand new in 3.30 — the most likely place for behavior differences. | 1 |
+| newest, daily | the latest-cmake nightly canary: pinned hc against the newest CMake release *or release candidate*, resolved from Kitware's releases at run time — caught without a PR, and before the pinned get-cmake catalog knows it | 2 |
 | **3.28 (negative)** | `find_package(Hylo)` must die with the curated "requires CMake 3.30" message, not an obscure `define_property` error. Verified by hand (2026-08-29); not in CI — installing a second, older CMake per run is not worth the complexity. | manual |
 
 Also once per release cycle: configure with `-Wdev --warn-uninitialized` and
@@ -258,7 +257,7 @@ flag changes triggering rebuilds (`flag-change-rebuild`, §3.3). Missing:
 
 ## 5. Cross-compilation
 
-The `--target` plumbing is tested at two tiers. Tier 1, every PR job:
+The `--target` plumbing is tested at two tiers. Tier 1, every Ninja PR job:
 `behaviour.cross-target` (toolchain file sets
 `CMAKE_C_COMPILER_TARGET=aarch64-linux-gnu`) asserts `--target` on every hc
 line, that `-DHylo_TARGET_TRIPLE=` overrides it, and the object's ELF
@@ -275,10 +274,9 @@ Still open (each answer goes in README):
   (`CMAKE_OSX_ARCHITECTURES=x86_64`, run under Rosetta) covers the Apple
   side; with the `macos-x64` hc asset and an Intel runner (§2.2) the reverse
   direction is natively verifiable too.
-- The configure-time works-check passes `--target` when the triple is set,
-  but no test asserts it, and its memoization key omits the triple: changing
-  `Hylo_TARGET_TRIPLE` on reconfigure skips the probe and defers failure to
-  build time. Fix the key, pin both with a test.
+- The configure-time works-check passes `--target` when the triple is set and
+  re-runs when the triple changes (the memoization key includes it since
+  602cda7), but no test asserts either behaviour; pin both with a test.
 - Stdlib cache keying: `Hylo_MODULE_CACHE_DIR` defaults into the build tree —
   verify a host build and a cross build in *different* trees never share, and
   that two configs / two triples in one multi-config tree don't collide.
@@ -304,10 +302,10 @@ Still open (each answer goes in README):
 - `Hylo_COMPILER` pointing at a broken/absent binary → curated failure, not a
   cryptic execute_process error.
 - Package-config path (`HyloConfig.cmake` in `<toolchain>/lib/cmake/Hylo`) —
-  covered on Unix via symlinks; the Windows exclusion (`NOT WIN32`) should be
-  lifted by having the fixture *copy* the toolchain instead of symlinking when
-  symlinks are unavailable, since the toolchain-tarball layout is the primary
-  distribution path and Windows is where it's untested.
+  covered everywhere: the fixture hard-links the toolchain (`toolchain_clone`
+  in `Harness.cmake`, shared with `behaviour.toolchain-swap`) instead of
+  symlinking, so `behaviour.package-config` runs on Windows too — important,
+  since the toolchain-tarball layout is the primary distribution path.
 - `install-export` — covered; add a *cross-config* consumer check (library
   installed from Release, consumed by a Debug project) since the installed
   `.hylomodule` is config-less.
@@ -334,9 +332,9 @@ mode needs guarding):
 The 0.0.5→0.0.6 CLI break (`-I` removed) is the shape of the biggest external
 risk, and the repo changes too rarely for PR CI to see the world move. The
 Nightly workflow is therefore two single-variable canaries, each pinning the
-other end: the latest hc release against a pinned CMake, and the latest CMake
-against the pinned hc, both running the full suite including the §3.2
-capability probe. The day the probe reports `HASH_PRECISE=ON`, or a flag
+other end: the latest hc release against a pinned CMake, and the newest CMake
+(release or RC, resolved from Kitware's releases at run time) against the
+pinned hc, both running the full suite including the §3.2 capability probe. The day the probe reports `HASH_PRECISE=ON`, or a flag
 disappears, a canary says so before a repo change trips over it — and the
 failed job names the moving part. An hc-HEAD canary (setup-hylo
 `version: nightly`, or built from source) would warn earlier but needs
@@ -375,7 +373,7 @@ nightly hc artifacts, which do not exist yet.
 2. **DONE (2026-08-29)**: `RunExpectExit`/`assert_exit` honour an emulator
    (each target's `CROSSCOMPILING_EMULATOR`); `behaviour.cross-target`
    (triple fidelity + pure-CMake ELF `e_machine` check, no cross C toolchain
-   needed — runs in every PR job); nightly `cross-aarch64` job
+   needed — runs in every Ninja PR job); nightly `cross-aarch64` job
    (`tests/toolchains/aarch64-linux-gnu.cmake`, gcc-aarch64 + qemu-user,
    exit-status tests run under qemu).
 3. **DONE (2026-08-29)**: `.github/workflows/nightly.yml` — the DAG fuzzer

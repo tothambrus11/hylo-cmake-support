@@ -6,19 +6,12 @@
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 fixture_create(diamond)
 
-# A stand-in toolchain: hard links (cheap; the toolchain is big) so that, unlike
-# a symlink, hc's own resolved path -- where it finds its bundled stdlib -- is
-# inside the stand-in.  Assumes the flat release layout (stdlib next to hc).
+# A stand-in toolchain (toolchain_clone, Harness.cmake).  Assumes the flat
+# release layout (stdlib next to hc); checked below.
 get_filename_component(_hc_name "${Hylo_COMPILER}" NAME)
-get_filename_component(_hc_src "${Hylo_COMPILER}" DIRECTORY)
 set(_tc_a "${WORK_DIR}/tc-a")
 set(_tc_b "${WORK_DIR}/tc-b")
-file(GLOB_RECURSE _files RELATIVE "${_hc_src}" "${_hc_src}/*")
-foreach(_f IN LISTS _files)
-  get_filename_component(_d "${_tc_a}/${_f}" DIRECTORY)
-  file(MAKE_DIRECTORY "${_d}")
-  file(CREATE_LINK "${_hc_src}/${_f}" "${_tc_a}/${_f}" COPY_ON_ERROR)
-endforeach()
+toolchain_clone("${_tc_a}")
 
 execute_process(COMMAND "${_tc_a}/${_hc_name}" --print-stdlib-root
   OUTPUT_VARIABLE _stdlib OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _r)
@@ -41,6 +34,7 @@ fixture_configure(ARGS "-DHylo_COMPILER=${_tc_a}/${_hc_name}")
 fixture_build(out)
 assert_build_ok(out)
 assert_exit("${WORK_DIR}/build/diamond/diamond" 23)
+assert_noop_rebuild("initial build")
 
 # Move the toolchain, reconfigure against the new location, rebuild.
 file(RENAME "${_tc_a}" "${_tc_b}")
@@ -48,6 +42,7 @@ fixture_configure(ARGS "-DHylo_COMPILER=${_tc_b}/${_hc_name}")
 fixture_build(out)
 assert_build_ok(out)
 assert_exit("${WORK_DIR}/build/diamond/diamond" 23)
+assert_noop_rebuild("after the toolchain move")
 
 # Nothing in the build graph may still reference the old location.
 if(EXISTS "${WORK_DIR}/build/build.ninja")

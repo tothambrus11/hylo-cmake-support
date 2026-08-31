@@ -48,12 +48,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # "latest" comes from the pinned get-cmake release's catalog, so it
-      # advances when Dependabot bumps the action; this job then keeps
-      # verifying that version daily even while no PRs happen.
+      # Resolved from Kitware's releases at run time, newest first so release
+      # candidates are covered too -- the pinned action's own "latest" catalog
+      # only advances when Dependabot bumps it, and that bump's PR CI already
+      # tests the version, so a catalog "latest" would canary nothing.
+      - name: Resolve the newest CMake (release candidates included)
+        id: latest-cmake
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "version=$(gh api repos/Kitware/CMake/releases -q '.[0].tag_name' | sed 's/^v//')" >> "$GITHUB_OUTPUT"
       - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
         with:
-          cmakeVersion: latest
+          cmakeVersion: ${{ steps.latest-cmake.outputs.version }}
       - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
         with:
           version: v${{ env.HYLO_VERSION }}
