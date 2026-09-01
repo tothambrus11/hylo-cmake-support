@@ -22,6 +22,7 @@ fixture_configure()
 fixture_build(out)
 assert_build_ok(out)
 assert_exit("${WORK_DIR}/build/diamond/diamond" 46)
+assert_noop_rebuild("after making the link PUBLIC")
 
 # A module that is not linked at all is not importable even if it is built in
 # the same project.

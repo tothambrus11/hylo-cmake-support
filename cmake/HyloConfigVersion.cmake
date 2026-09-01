@@ -1,6 +1,6 @@
 # Version file for the Hylo package configuration: reports the version of the
 # hc found next to this file (see HyloConfig.cmake for the layouts searched),
-# so `find_package(Hylo 0.0.6)` can be checked before HyloConfig.cmake runs.
+# so `find_package(Hylo 0.0.8)` can be checked before HyloConfig.cmake runs.
 # A compiler that reports a non-numeric version ("development") is accepted for
 # any requested version.
 

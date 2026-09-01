@@ -5,12 +5,14 @@
 > integration was replaced by a `find_package(Hylo)` + custom-command design when
 > moving to hc 0.0.6; see `../cmake/README.md` for the current design and
 > `UPSTREAM-PLAN.md` for what changed and why. The analysis below is kept as history;
-> its findings about hc and about upstream CMake still hold.
+> its findings about upstream CMake still hold. The "Ranked next steps" for hc are
+> overtaken: the interface hash, the multi-module CLI and `--version` shipped
+> (`FINDINGS.md`), and `UPSTREAM-PLAN.md` decided *against* a depfile.
 
 Two-hour research + prototyping session. Everything here is implemented and measured; the Hylo
 compiler diff is uncommitted in `~/CMake/hylo-new` (nothing pushed). All 416 Hylo tests pass.
 
-## The five documents
+## The documents of that session
 
 | Doc | What it covers |
 |---|---|

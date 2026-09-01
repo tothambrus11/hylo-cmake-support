@@ -1,15 +1,6 @@
 # Hylo_FLAGS_<CONFIG> reach hc: Release builds pass -O, Debug builds do not,
 # and hylo_target_compile_options adds per-target options.
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
-
-# Extracts the hc command line that compiled <module> from verbose build output.
-function(hc_command out module text)
-  string(REGEX MATCH "hc(\\.exe)? --module-name ${module} [^\n]*" _cmd "${text}")
-  if(NOT _cmd)
-    message(FATAL_ERROR "no hc command for module ${module} in:\n${text}")
-  endif()
-  set(${out} "${_cmd}" PARENT_SCOPE)
-endfunction()
 fixture_create(diamond plain-targets)
 
 fixture_configure(BUILD_DIR "${WORK_DIR}/debug" ARGS -DCMAKE_BUILD_TYPE=Debug)

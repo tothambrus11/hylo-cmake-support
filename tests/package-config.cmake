@@ -1,18 +1,18 @@
 # The CMake support can be shipped inside a toolchain as a package config:
 # with <root>/lib/cmake/Hylo/{HyloConfig,HyloConfigVersion,FindHylo,HyloTargets}.cmake
-# and <root>/bin/hc, `find_package(Hylo 0.0.6 REQUIRED)` works from
+# and <root>/bin/hc, `find_package(Hylo 0.0.8 REQUIRED)` works from
 # CMAKE_PREFIX_PATH alone, with no CMAKE_MODULE_PATH and no hc on PATH.
 include("${CMAKE_CURRENT_LIST_DIR}/Harness.cmake")
 file(REMOVE_RECURSE "${WORK_DIR}")
 set(_root "${WORK_DIR}/toolchain")
 file(MAKE_DIRECTORY "${_root}/lib/cmake/Hylo")
-# Stand in for an installed toolchain by symlinking the directory that holds hc
-# as <root>/bin: the bundled standard library (Hylo_StandardLibrary.resources)
-# must stay next to the executable -- on macOS hc looks it up via its own,
-# unresolved, executable path, so linking hc alone would not do.
+# Stand in for an installed toolchain by cloning the directory that holds hc
+# as <root>/bin (toolchain_clone, Harness.cmake): the bundled standard library
+# (Hylo_StandardLibrary.resources) must stay next to the executable -- on
+# macOS hc looks it up via its own, unresolved, executable path, so linking
+# hc alone would not do.
 get_filename_component(_hc_name "${Hylo_COMPILER}" NAME)
-get_filename_component(_hc_dir "${Hylo_COMPILER}" DIRECTORY)
-file(CREATE_LINK "${_hc_dir}" "${_root}/bin" SYMBOLIC)
+toolchain_clone("${_root}/bin")
 foreach(_f HyloConfig.cmake HyloConfigVersion.cmake FindHylo.cmake HyloTargets.cmake)
   file(COPY "${SOURCE_DIR}/cmake/${_f}" DESTINATION "${_root}/lib/cmake/Hylo")
 endforeach()
@@ -22,7 +22,7 @@ file(COPY "${SOURCE_DIR}/examples/diamond" DESTINATION "${WORK_DIR}/src")
 file(WRITE "${WORK_DIR}/src/CMakeLists.txt" "
 cmake_minimum_required(VERSION 3.30)
 project(PkgConfigFixture LANGUAGES C)
-find_package(Hylo 0.0.6 REQUIRED)      # no CMAKE_MODULE_PATH: must come from the prefix
+find_package(Hylo 0.0.8 REQUIRED)      # no CMAKE_MODULE_PATH: must come from the prefix
 function(add_exit_status_test)
 endfunction()
 add_subdirectory(diamond)

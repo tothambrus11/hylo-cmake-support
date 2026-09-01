@@ -154,14 +154,13 @@ define_property(TARGET PROPERTY INTERFACE_HYLO_MODULE_DEPENDS
 # immutable copy, but a locally built hc reads it from the source tree, where it
 # can change without the compiler binary changing; depending on the sources
 # keeps objects from going stale against a modified stdlib either way.
-if(NOT DEFINED _Hylo_STDLIB_SOURCES)
-  file(GLOB_RECURSE _hylo_stdlib_sources "${Hylo_STDLIB_ROOT}/*.hylo")
-  get_filename_component(_hylo_stdlib_parent "${Hylo_STDLIB_ROOT}" DIRECTORY)
-  if(EXISTS "${_hylo_stdlib_parent}/Generated.hylo")
-    list(APPEND _hylo_stdlib_sources "${_hylo_stdlib_parent}/Generated.hylo")
-  endif()
-  set(_Hylo_STDLIB_SOURCES "${_hylo_stdlib_sources}" CACHE INTERNAL "Hylo stdlib sources")
-endif()
+# Reglobbed on every configure so a replaced toolchain cannot leave modules
+# depending on the old one's files (behaviour.toolchain-swap); CACHE INTERNAL,
+# always overwritten, only makes the list visible in every directory.  The
+# root is the whole bundle (Sources/ and Generated.hylo), so one recursive
+# glob covers everything hc reads.
+file(GLOB_RECURSE _hylo_stdlib_sources "${Hylo_STDLIB_ROOT}/*.hylo")
+set(_Hylo_STDLIB_SOURCES "${_hylo_stdlib_sources}" CACHE INTERNAL "Hylo stdlib sources")
 
 # Evaluates to "/<config>" under multi-config generators and "" otherwise, so
 # per-target outputs do not collide across configurations.
@@ -205,6 +204,17 @@ function(hylo_target_module target)
   endif()
   if(NOT TARGET ${target})
     message(FATAL_ERROR "hylo_target_module: '${target}' is not a target")
+  endif()
+
+  # A Hylo module's object is a generated, per-configuration source (its path
+  # contains $<CONFIG>), and Xcode is the one generator without per-config
+  # sources: it evaluates the path with the literal configuration "NOCONFIG"
+  # and fails on the missing file (observed with CMake 4.3 / Xcode 26).
+  if(CMAKE_GENERATOR STREQUAL "Xcode")
+    message(FATAL_ERROR
+      "hylo_target_module(${target}): the Xcode generator is not supported (it has no "
+      "per-config sources, which the module's per-configuration object requires). "
+      "Use the Ninja Multi-Config generator instead.")
   endif()
 
   get_target_property(_type ${target} TYPE)
@@ -313,6 +323,8 @@ function(hylo_target_module target)
     DEPENDS "${_sources}" "${_module_depends}" "${Hylo_COMPILER}" ${_Hylo_STDLIB_SOURCES}
     COMMAND_EXPAND_LISTS
     VERBATIM
+    # The behaviour tests key their recompile assertions on this wording
+    # (HYLO_COMPILE_MESSAGE in tests/Harness.cmake); change both together.
     COMMENT "Compiling Hylo module ${_module} (${target})")
 
   # The object is an EXTERNAL_OBJECT source (by extension); CMake links it and

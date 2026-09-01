@@ -3,6 +3,21 @@
 # Expects: SOURCE_DIR (repo root), WORK_DIR (scratch dir for this test),
 # Hylo_COMPILER, GENERATOR, MAKE_PROGRAM, C_COMPILER, NINJA, MAKE.
 
+# The compile edge's COMMENT wording, defined once; HyloTargets.cmake and the
+# whole suite's recompiled/not-recompiled assertions must agree on it.
+# assert_noop_rebuild() checks the wording actually appeared in an earlier
+# build of the test, so drift fails loudly instead of matching nothing.
+set(HYLO_COMPILE_MESSAGE "Compiling Hylo module")
+
+# The suffix of the module objects in the fixtures' host builds.  Mirrors
+# CMAKE_C_OUTPUT_EXTENSION (which names them in HyloTargets.cmake but is not
+# available in a -P script): ".obj" on Windows for every toolchain, ".o"
+# elsewhere.
+set(HYLO_OBJ_EXT ".o")
+if(WIN32)
+  set(HYLO_OBJ_EXT ".obj")
+endif()
+
 # Creates a fresh fixture project in ${WORK_DIR}/src made of copies of the
 # named example directories, with a top-level CMakeLists that finds Hylo.
 function(fixture_create)
@@ -67,17 +82,23 @@ function(fixture_build out)
     RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _e)
   set(${out} "${_o}${_e}" PARENT_SCOPE)
   set(${out}_RESULT "${_r}" PARENT_SCOPE)
-endfunction()
-
-function(assert_build_ok out)
-  if(NOT ${out}_RESULT EQUAL 0)
-    message(FATAL_ERROR "build failed (${${out}_RESULT}):\n${${out}}")
+  string(FIND "${_o}${_e}" "${HYLO_COMPILE_MESSAGE}" _saw)
+  if(NOT _saw EQUAL -1)
+    set_property(GLOBAL PROPERTY HYLO_COMPILE_MESSAGE_SEEN TRUE)
   endif()
 endfunction()
 
-function(assert_build_fails out)
-  if(${out}_RESULT EQUAL 0)
-    message(FATAL_ERROR "build unexpectedly succeeded:\n${${out}}")
+# The parameter must not be named like the caller's variable (conventionally
+# `out`), or it would shadow the very variable it is meant to dereference.
+function(assert_build_ok _abo_var)
+  if(NOT ${_abo_var}_RESULT EQUAL 0)
+    message(FATAL_ERROR "build failed (${${_abo_var}_RESULT}):\n${${_abo_var}}")
+  endif()
+endfunction()
+
+function(assert_build_fails _abf_var)
+  if(${_abf_var}_RESULT EQUAL 0)
+    message(FATAL_ERROR "build unexpectedly succeeded:\n${${_abf_var}}")
   endif()
 endfunction()
 
@@ -95,8 +116,10 @@ function(assert_not_contains text needle why)
   endif()
 endfunction()
 
+# Extra arguments, if any, are prepended to the command line (an emulator for
+# cross-built fixtures).
 function(assert_exit exe expected)
-  execute_process(COMMAND "${exe}" RESULT_VARIABLE _r)
+  execute_process(COMMAND ${ARGN} "${exe}" RESULT_VARIABLE _r)
   if(NOT _r STREQUAL expected)
     message(FATAL_ERROR "${exe}: expected exit status ${expected}, got ${_r}")
   endif()
@@ -110,5 +133,99 @@ endfunction()
 
 # The compiled-module message for <module>, as printed by the custom command.
 function(compile_message out module)
-  set(${out} "Compiling Hylo module ${module} (" PARENT_SCOPE)
+  set(${out} "${HYLO_COMPILE_MESSAGE} ${module} (" PARENT_SCOPE)
+endfunction()
+
+# Assert that captured build output does (not) show <module> being recompiled.
+function(assert_compiled text module why)
+  compile_message(_m "${module}")
+  assert_contains("${text}" "${_m}" "${why}")
+endfunction()
+
+function(assert_not_compiled text module why)
+  compile_message(_m "${module}")
+  assert_not_contains("${text}" "${_m}" "${why}")
+endfunction()
+
+# Builds again and asserts the build is a no-op: nothing compiled, nothing
+# linked.  Catches always-dirty edges, restat loops, and commands that touch
+# their own inputs.  Accepts fixture_build's BUILD_DIR/CONFIG.
+function(assert_noop_rebuild why)
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "BUILD_DIR;CONFIG" "")
+  # Self-check: the message must have appeared in an earlier, real build of
+  # this test; otherwise the negative assertions below match nothing and pass
+  # vacuously (e.g. after HyloTargets.cmake rewords its COMMENT).
+  get_property(_seen GLOBAL PROPERTY HYLO_COMPILE_MESSAGE_SEEN)
+  if(NOT _seen)
+    message(FATAL_ERROR "${why}: '${HYLO_COMPILE_MESSAGE}' never appeared in "
+      "any build output; the harness wording has drifted from "
+      "HyloTargets.cmake's COMMENT")
+  endif()
+  set(_fb)
+  if(arg_BUILD_DIR)
+    list(APPEND _fb BUILD_DIR "${arg_BUILD_DIR}")
+  endif()
+  if(arg_CONFIG)
+    list(APPEND _fb CONFIG "${arg_CONFIG}")
+  endif()
+  fixture_build(_noop ${_fb})
+  assert_build_ok(_noop)
+  assert_not_contains("${_noop}" "${HYLO_COMPILE_MESSAGE}" "${why}: second build must be a no-op")
+  assert_not_contains("${_noop}" "Linking C" "${why}: second build must not relink")
+endfunction()
+
+# Sets ${out} to ON when the compiler's interface hash is precise (a body-only
+# change leaves it untouched -- hylo-lang/hylo-new#321), OFF while it is a
+# hash of the whole archive.  Incremental tests assert soundness identically
+# either way and branch only their expected recompile sets on this
+# (notes/TESTING-STRATEGY.md, section 3.2).
+function(probe_hash_precise out)
+  set(_d "${WORK_DIR}/hash-probe")
+  file(MAKE_DIRECTORY "${_d}/cache")
+  foreach(_body IN ITEMS 1 2)
+    file(WRITE "${_d}/P.hylo" "public fun p() -> Int32 { ${_body} }\n")
+    execute_process(
+      COMMAND "${Hylo_COMPILER}" --module-name P --module-cache "${_d}/cache"
+        --emit object -o "${_d}/P.o" --emit-module-to "${_d}/P.hylomodule"
+        --emit-module-interface-hash-to "${_d}/P${_body}.iface" "${_d}/P.hylo"
+      RESULT_VARIABLE _r OUTPUT_VARIABLE _o ERROR_VARIABLE _o)
+    if(NOT _r EQUAL 0)
+      message(FATAL_ERROR "hash probe failed to compile (${_r}):\n${_o}")
+    endif()
+  endforeach()
+  file(READ "${_d}/P1.iface" _h1 HEX)
+  file(READ "${_d}/P2.iface" _h2 HEX)
+  if(_h1 STREQUAL _h2)
+    set(${out} ON PARENT_SCOPE)
+    message(STATUS "interface hash: precise (body-only edits leave it unchanged)")
+  else()
+    set(${out} OFF PARENT_SCOPE)
+    message(STATUS "interface hash: conservative (whole archive)")
+  endif()
+endfunction()
+
+# A stand-in toolchain at <dest>: hard links of every file in the directory
+# holding ${Hylo_COMPILER} (cheap -- the toolchain is big; COPY_ON_ERROR
+# crosses filesystems).  Unlike a symlink of hc alone, the clone's hc resolves
+# its own executable path -- where it finds its bundled stdlib -- inside
+# <dest>.  Used by behaviour.toolchain-swap and behaviour.package-config.
+function(toolchain_clone dest)
+  get_filename_component(_src "${Hylo_COMPILER}" DIRECTORY)
+  file(GLOB_RECURSE _files RELATIVE "${_src}" "${_src}/*")
+  foreach(_f IN LISTS _files)
+    get_filename_component(_d "${dest}/${_f}" DIRECTORY)
+    file(MAKE_DIRECTORY "${_d}")
+    file(CREATE_LINK "${_src}/${_f}" "${dest}/${_f}" COPY_ON_ERROR)
+  endforeach()
+endfunction()
+
+# Extracts the hc command line that compiled <module> from verbose build output.
+function(hc_command out module text)
+  # The optional quote: build tools print the compiler path quoted when it
+  # contains spaces.
+  string(REGEX MATCH "hc(\\.exe)?\"? --module-name ${module} [^\n]*" _cmd "${text}")
+  if(NOT _cmd)
+    message(FATAL_ERROR "no hc command for module ${module} in:\n${text}")
+  endif()
+  set(${out} "${_cmd}" PARENT_SCOPE)
 endfunction()

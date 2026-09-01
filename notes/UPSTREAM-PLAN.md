@@ -1,6 +1,7 @@
 # Hylo × CMake: where we are, and tiered plans for upstream work
 
-Status as of 2026-08-22, against **hc 0.0.6** and **CMake 4.3**. Companion to the
+Status as of 2026-08-29, against **hc 0.0.8** (the supported floor) and
+**CMake ≥ 3.30**. Companion to the
 research notes in this directory (which document the *language-module* integration
 this repository started with; see "What changed" below).
 
@@ -24,7 +25,8 @@ the C toolchain. Properties, verified by `tests/*.cmake` under ctest:
 | install/export of Hylo libraries (`hylo_install_module` + `install(EXPORT)`, consumed via `find_package`) | ✅ |
 | package config for shipping inside a toolchain (`find_package(Hylo)` from `CMAKE_PREFIX_PATH`) | ✅ |
 | Windows (MSVC + Ninja), macOS arm64, Linux x64/arm64 | ✅ in CI |
-| VS / Xcode generators | untested (nothing generator-specific is used except restat) |
+| Visual Studio 2022 / 2026 generators | ✅ supported, gating CI jobs |
+| Xcode generator | ❌ unsupported (no per-config sources; curated configure-time diagnostic) |
 
 ### What changed versus the language-module version
 
@@ -166,10 +168,8 @@ language-module world as well.
 
 ## 4. Priorities for the next session
 
-1. Push to CI (`.github/workflows/ci.yml`: Linux x64/arm64, macOS arm64; Ninja,
-   Multi-Config, Makefiles) and keep it green.
-2. Tier 0: PR to hylo-new's release workflow to ship `lib/cmake/Hylo/*.cmake` in
+1. Tier 0: PR to hylo-new's release workflow to ship `lib/cmake/Hylo/*.cmake` in
    the toolchain tarballs; propose this repo's `cmake/` as the official support.
-3. Tier 1.1 and 1.2 as CMake MRs — both are small and each has a crisp test.
-4. On the hc side: the precise interface hash (#321) is the single biggest win the
+2. Tier 1.1 and 1.2 as CMake MRs — both are small and each has a crisp test.
+3. On the hc side: the precise interface hash (#321) is the single biggest win the
    build graph is waiting for.

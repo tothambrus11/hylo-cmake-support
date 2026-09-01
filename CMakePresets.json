@@ -25,7 +25,7 @@
             "displayName": "Hylo (Ninja Multi-Config)",
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build-multi",
-            "cacheVariables": {}
+            "cacheVariables": { "CMAKE_BUILD_TYPE": null }
         },
         {
             "name": "make",
@@ -33,6 +33,32 @@
             "displayName": "Hylo (Unix Makefiles)",
             "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/build-make"
+        },
+        {
+            "name": "nmake",
+            "inherits": "default",
+            "displayName": "Hylo (NMake Makefiles)",
+            "generator": "NMake Makefiles",
+            "binaryDir": "${sourceDir}/build-nmake",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
+            "name": "vs2026",
+            "inherits": "default",
+            "displayName": "Hylo (Visual Studio 2026)",
+            "generator": "Visual Studio 18 2026",
+            "binaryDir": "${sourceDir}/build-vs2026",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": null },
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        },
+        {
+            "name": "vs2022",
+            "inherits": "default",
+            "displayName": "Hylo (Visual Studio 2022)",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build-vs2022",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": null },
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
         }
     ],
     "buildPresets": [
@@ -40,12 +66,18 @@
         { "name": "release", "configurePreset": "release" },
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug" },
         { "name": "multi-release", "configurePreset": "multi", "configuration": "Release" },
-        { "name": "make", "configurePreset": "make" }
+        { "name": "make", "configurePreset": "make" },
+        { "name": "nmake", "configurePreset": "nmake" },
+        { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug" },
+        { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug" }
     ],
     "testPresets": [
         { "name": "default", "configurePreset": "default", "output": { "outputOnFailure": true } },
         { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
         { "name": "multi-debug", "configurePreset": "multi", "configuration": "Debug", "output": { "outputOnFailure": true } },
-        { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } }
+        { "name": "make", "configurePreset": "make", "output": { "outputOnFailure": true } },
+        { "name": "nmake", "configurePreset": "nmake", "output": { "outputOnFailure": true } },
+        { "name": "vs2026-debug", "configurePreset": "vs2026", "configuration": "Debug", "output": { "outputOnFailure": true } },
+        { "name": "vs2022-debug", "configurePreset": "vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } }
     ]
 }

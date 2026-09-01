@@ -1,0 +1,75 @@
+name: Nightly
+
+# Drift canaries.  The repo changes rarely, so breakage caused by the outside
+# world moving -- a new hc release, a new CMake -- has to be caught by the
+# schedule, not by PR CI (which only runs when we change something).  Each job
+# moves exactly one variable and pins the other.  Everything else runs in
+# ci.yml on every change.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+env:
+  # The pinned ends of each canary.
+  HYLO_VERSION: 0.0.8
+  CMAKE_PINNED: 3.30.0
+
+jobs:
+  latest-hc:
+    name: Latest hc release (CMake pinned)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ env.CMAKE_PINNED }}
+      - name: Resolve latest hc release
+        id: latest-hylo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "tag=$(gh api repos/hylo-lang/hylo-new/releases/latest -q .tag_name)" >> "$GITHUB_OUTPUT"
+      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
+        with:
+          version: ${{ steps.latest-hylo.outputs.tag }}
+      - name: Toolchain info
+        run: |
+          hc --version
+          cmake --version | head -1
+      - name: Configure
+        run: cmake --preset default
+      - name: Build
+        run: cmake --build --preset default
+      - name: Test
+        run: ctest --preset default -j 2
+
+  latest-cmake:
+    name: Latest CMake (hc pinned)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Resolved from Kitware's releases at run time, newest first so release
+      # candidates are covered too -- the pinned action's own "latest" catalog
+      # only advances when Dependabot bumps it, and that bump's PR CI already
+      # tests the version, so a catalog "latest" would canary nothing.
+      - name: Resolve the newest CMake (release candidates included)
+        id: latest-cmake
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "version=$(gh api repos/Kitware/CMake/releases -q '.[0].tag_name' | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+      - uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb # v4.4.2
+        with:
+          cmakeVersion: ${{ steps.latest-cmake.outputs.version }}
+      - uses: hylo-lang/setup-hylo@9394a288dc5025755d981eb089b2f2b025d9cc06 # v1.0.0
+        with:
+          version: v${{ env.HYLO_VERSION }}
+      - name: Toolchain info
+        run: |
+          hc --version
+          cmake --version | head -1
+      - name: Configure
+        run: cmake --preset default
+      - name: Build
+        run: cmake --build --preset default
+      - name: Test
+        run: ctest --preset default -j 2
